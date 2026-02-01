@@ -1,50 +1,75 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
+import { PanelHeader, type Tab } from "@/components/panel-header";
+import { PanelFooter } from "@/components/panel-footer";
+import { OverviewPage } from "@/pages/overview";
+import { SettingsPage } from "@/pages/settings";
+import { APP_VERSION } from "@/lib/mock-data";
+
+const PANEL_WIDTH = 350;
+const MAX_HEIGHT = 600;
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  // Initialize panel on mount
+  useEffect(() => {
+    invoke("init_panel").catch(console.error);
+  }, []);
+
+  // Auto-resize window to fit content using ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeWindow = async () => {
+      const rect = container.getBoundingClientRect();
+      const factor = window.devicePixelRatio;
+
+      const width = Math.ceil(PANEL_WIDTH * factor);
+      const height = Math.ceil(Math.min(rect.height, MAX_HEIGHT) * factor);
+
+      try {
+        const currentWindow = getCurrentWindow();
+        await currentWindow.setSize(new PhysicalSize(width, height));
+      } catch (e) {
+        console.error("Failed to resize window:", e);
+      }
+    };
+
+    // Initial resize
+    resizeWindow();
+
+    // Observe size changes
+    const observer = new ResizeObserver(() => {
+      resizeWindow();
+    });
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, [activeTab]);
+
+  const handleRefresh = () => {
+    console.log("Refresh triggered");
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div
+      ref={containerRef}
+      className="bg-card rounded-lg border shadow-lg overflow-hidden select-none"
+    >
+      <div className="p-4 flex flex-col">
+        <PanelHeader activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+        <div className="mt-3">
+          {activeTab === "overview" ? <OverviewPage /> : <SettingsPage />}
+        </div>
+
+        <PanelFooter version={APP_VERSION} onRefresh={handleRefresh} />
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 
