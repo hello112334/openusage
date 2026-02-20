@@ -1,12 +1,12 @@
-# Track all your AI coding subscriptions in one place
+# Track all your AI coding subscriptions in one place (now with Linux)
 
-See your usage at a glance from your menu bar. No digging through dashboards.
+See your usage at a glance from your menu bar or tray. Linux support was just added.
 
 ![OpenUsage Screenshot](screenshot.png)
 
 ## Download
 
-[**Download the latest release**](https://github.com/robinebers/openusage/releases/latest) (macOS, Apple Silicon & Intel)
+[**Download the latest release**](https://github.com/robinebers/openusage/releases/latest) (macOS Apple Silicon & Intel, Linux `.deb`)
 
 The app auto-updates. Install once and you're set.
 
@@ -49,7 +49,7 @@ I maintain the project as a guide and quality gatekeeper, but this is your app a
 
 Plugins are currently bundled as we build our the API, but soon will be made flexible so you can build and load their own.
 
-**Windows/Linux:** high-priority and on the todo, but I need testers with some time, willing to help out.
+**Windows:** high-priority and on the todo, and I need testers with some time, willing to help out.
 
 ### How to Contribute
 
