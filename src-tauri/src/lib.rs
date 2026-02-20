@@ -159,10 +159,7 @@ fn init_panel(app_handle: tauri::AppHandle) {
 
 #[tauri::command]
 fn hide_panel(app_handle: tauri::AppHandle) {
-    use tauri_nspanel::ManagerExt;
-    if let Ok(panel) = app_handle.get_webview_panel("main") {
-        panel.hide();
-    }
+    panel::hide_panel(&app_handle);
 }
 
 #[tauri::command]
@@ -405,11 +402,10 @@ pub fn run() {
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     let _guard = runtime.enter();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_aptabase::Builder::new("A-US-6435241436").build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_nspanel::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -426,7 +422,12 @@ pub fn run() {
         )
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_autostart::Builder::new().build());
+
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             init_panel,
             hide_panel,
@@ -466,6 +467,10 @@ pub fn run() {
             tray::create(app.handle())?;
 
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+
+            // Linux desktops may not always expose tray icons; show the app window on startup.
+            #[cfg(not(target_os = "macos"))]
+            panel::show_panel(app.handle());
 
             // Register global shortcut from stored settings
             #[cfg(desktop)]
