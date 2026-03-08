@@ -1,4 +1,4 @@
-# Track all your AI coding subscriptions in one place (now with Linux)
+# Track all your AI coding subscriptions in one place (Linux version)
 
 See your usage at a glance from your menu bar or tray. Linux support was just added.
 
