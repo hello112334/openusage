@@ -1,93 +1,124 @@
-# Track all your AI coding subscriptions in one place (Linux version)
+# OpenUsage Linux Fork
 
-See your usage at a glance from your menu bar or tray. Linux support was just added.
+> Note: This is a fork of [Original Repo](https://github.com/robinebers/openusage). This version is modified and optimized specifically for Linux environments.
+
+Track AI coding subscription usage from a Linux tray or desktop panel with one local desktop app.
 
 ![OpenUsage Screenshot](screenshot.png)
 
-## Download
+## Overview
 
-[**Download the latest release**](https://github.com/robinebers/openusage/releases/latest) (macOS Apple Silicon & Intel, Linux `.deb`)
+This fork keeps the OpenUsage plugin model and usage dashboard idea, but is maintained with a Linux-first focus:
 
-The app auto-updates. Install once and you're set.
+- Linux-oriented release pipeline and packaging
+- Ubuntu-friendly build dependencies and CI
+- Linux runtime behavior fixes
+- Linux auth compatibility fixes for CLI-backed providers
 
-## What It Does
+The project is aimed at people who want one place to check usage across multiple AI coding tools without manually opening each provider app or CLI.
 
-OpenUsage lives in your menu bar and shows you how much of your AI coding subscriptions you've used. Progress bars, badges, and clear labels. No mental math required.
+## Status
 
-- **One glance.** All your AI tools, one panel.
-- **Always up-to-date.** Refreshes automatically on a schedule you pick.
-- **Global shortcut.** Toggle the panel from anywhere with a customizable keyboard shortcut.
-- **Lightweight.** Opens instantly, stays out of your way.
-- **Plugin-based.** New providers get added without updating the whole app.
+- Primary target: Linux desktops
+- Release artifact: `.deb`
+- Current CI/CD publishing target: `x86_64-unknown-linux-gnu`
+- Source builds on other platforms may still work, but this fork is maintained for Linux first
 
 ## Supported Providers
 
-- [**Amp**](docs/providers/amp.md) / free tier, bonus, credits
-- [**Antigravity**](docs/providers/antigravity.md) / all models
-- [**Claude**](docs/providers/claude.md) / session, weekly, extra usage
-- [**Codex**](docs/providers/codex.md) / session, weekly, reviews, credits
-- [**Copilot**](docs/providers/copilot.md) / premium, chat, completions
-- [**Cursor**](docs/providers/cursor.md) / credits, plan usage, on-demand
-- [**Gemini**](docs/providers/gemini.md) / pro, flash, workspace/free/paid tier
-- [**Kimi Code**](docs/providers/kimi.md) / session, weekly
-- [**Windsurf**](docs/providers/windsurf.md) / prompt credits, flex credits
-- [**Z.ai**](docs/providers/zai.md) / session, web searches
+- [Amp](docs/providers/amp.md)
+- [Antigravity](docs/providers/antigravity.md)
+- [Claude](docs/providers/claude.md)
+- [Codex](docs/providers/codex.md)
+- [Copilot](docs/providers/copilot.md)
+- [Cursor](docs/providers/cursor.md)
+- [Factory / Droid](docs/providers/factory.md)
+- [Gemini](docs/providers/gemini.md)
+- [Kimi Code](docs/providers/kimi.md)
+- [Perplexity](docs/providers/perplexity.md)
+- [Windsurf](docs/providers/windsurf.md)
+- [Z.ai](docs/providers/zai.md)
 
-### Maybe Soon
+## Install
 
-- [Factory / Droid](https://github.com/robinebers/openusage/issues/16)
-- [Vercel AI Gateway](https://github.com/robinebers/openusage/issues/18)
+Download the latest Linux build from this fork:
 
-Community contributions welcome.
-Want a provider that's not listed? [Open an issue.](https://github.com/robinebers/openusage/issues/new)
+[Download latest Linux release](https://github.com/hello112334/openusage/releases/latest)
 
-## Open Source, Community Driven
+The current release workflow is set up for Debian-style Linux packages. On Ubuntu or Debian:
 
-OpenUsage is built by its users. Hundreds of people use it daily, and the project grows through community contributions: new providers, bug fixes, and ideas.
+```bash
+sudo apt install ./openusage_*.deb
+```
 
-I maintain the project as a guide and quality gatekeeper, but this is your app as much as mine. If something is missing or broken, the best way to get it fixed is to contribute by opening an issue, or submitting a PR.
+If your distro is not Debian-based, build from source instead.
 
-Plugins are currently bundled as we build our the API, but soon will be made flexible so you can build and load their own.
+## Build From Source
 
-**Windows:** high-priority and on the todo, and I need testers with some time, willing to help out.
+### Requirements
 
-### How to Contribute
+- Linux desktop environment
+- Node.js 20+
+- npm
+- Rust stable toolchain
+- Bun for the release wrapper script
 
-- **Add a provider.** Each one is just a plugin. See the [Plugin API](docs/plugins/api.md).
-- **Fix a bug.** PRs welcome. Provide before/after screenshots.
-- **Request a feature.** [Open an issue](https://github.com/robinebers/openusage/issues/new) and make your case.
+Install Linux system packages:
 
-Keep it simple. No feature creep, no AI-generated commit messages, test your changes.
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  patchelf
+```
 
-## Built Entirely with AI
+### Development
 
-Not a single line of code in this project was read or written by hand. 100% AI-generated, AI-reviewed, AI-shipped — using [Cursor](https://cursor.com), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and [Codex CLI](https://github.com/openai/codex).
+```bash
+npm install
+npm run tauri -- dev
+```
 
-OpenUsage is a real-world example of what I teach in the [AI Builder's Blueprint](https://itsbyrob.in/EBDqgJ6) — a proven process for building and shipping software with AI, no coding background required.
+### Release Build
 
-## Sponsors
+```bash
+bun install
+bun run build:release -- --target x86_64-unknown-linux-gnu --bundles deb
+```
 
-OpenUsage is supported by our sponsors. Become a sponsor to get your logo here and on [openusage.ai](https://openusage.ai).
+If you need signed updater artifacts, create a `.env` based on [`.env.example`](.env.example) before running the release build.
 
-[Become a Sponsor](https://github.com/sponsors/robinebers)
+## Repository Layout
 
-<!-- Add sponsor logos here -->
+- [`docs/providers`](docs/providers) provider-specific auth and usage notes
+- [`docs/plugins/api.md`](docs/plugins/api.md) plugin runtime API
+- [`plugins`](plugins) bundled provider plugins
+- [`src`](src) React frontend
+- [`src-tauri`](src-tauri) Tauri and Rust desktop runtime
 
-## Credits
+## Contributing
 
-Inspired by [CodexBar](https://github.com/steipete/CodexBar) by [@steipete](https://github.com/steipete). Same idea, very different approach.
+Linux-focused fixes, provider plugins, auth compatibility fixes, packaging improvements, and desktop behavior fixes are all in scope for this fork.
+
+- Provider docs: [docs/providers](docs/providers)
+- Plugin API: [docs/plugins/api.md](docs/plugins/api.md)
+- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+
+Issues and PRs for this fork should go to this repository:
+
+[hello112334/openusage issues](https://github.com/hello112334/openusage/issues)
+
+## Upstream
+
+Upstream project:
+
+- [robinebers/openusage](https://github.com/robinebers/openusage)
+
+This fork exists to keep a Linux-optimized variant moving faster for Linux users and Linux-specific fixes.
 
 ## License
 
 [MIT](LICENSE)
-
----
-
-<details>
-<summary><strong>Build from source</strong></summary>
-
-> **Warning**: The `main` branch may not be stable. It is merged directly without staging, so users are advised to use tagged versions for stable builds. Tagged versions are fully tested while `main` may contain unreleased features.
-
-### Stack
-
-...
