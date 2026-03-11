@@ -21,7 +21,7 @@ The language server listens on a random localhost port. Three values must be dis
 
 ```bash
 # 1. Find process and extract CSRF token
-ps -ax -o pid=,command= | grep 'language_server_macos.*antigravity'
+ps -ax -o pid=,command= | grep 'language_server_.*antigravity'
 # Match: --app_data_dir antigravity  OR  path contains /antigravity/
 # Extract: --csrf_token <token>
 # Extract: --extension_server_port <port>  (HTTP fallback)
@@ -160,7 +160,8 @@ Interestingly, non-Google models (Claude, GPT-OSS) are proxied through Codeium/W
 
 Antigravity stores auth credentials in a VS Code-compatible state database.
 
-- **Path:** `~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb`
+- **macOS path:** `~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb`
+- **Linux path:** `~/.config/Antigravity/User/globalStorage/state.vscdb`
 - **Table:** `ItemTable` (`key` TEXT, `value` TEXT)
 
 ### antigravityAuthStatus

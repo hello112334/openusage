@@ -1,6 +1,9 @@
 (function () {
   var LS_SERVICE = "exa.language_server_pb.LanguageServerService"
-  var STATE_DB = "~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb"
+  var MACOS_STATE_DB = "~/Library/Application Support/Antigravity/User/globalStorage/state.vscdb"
+  var LINUX_STATE_DB = "~/.config/Antigravity/User/globalStorage/state.vscdb"
+  var LINUX_STATE_DB_LOWER = "~/.config/antigravity/User/globalStorage/state.vscdb"
+  var WINDOWS_STATE_DB = "~/AppData/Roaming/Antigravity/User/globalStorage/state.vscdb"
   var CLOUD_CODE_URLS = [
     "https://daily-cloudcode-pa.googleapis.com",
     "https://cloudcode-pa.googleapis.com",
@@ -63,15 +66,50 @@
 
   // --- SQLite credential reading ---
 
+  function getPlatform(ctx) {
+    var platform = (((ctx || {}).app || {}).platform || "").toLowerCase()
+    if (platform === "darwin") return "macos"
+    if (platform === "win32") return "windows"
+    return platform || "macos"
+  }
+
+  function getStateDbPaths(ctx) {
+    var platform = getPlatform(ctx)
+    if (platform === "linux") {
+      return [LINUX_STATE_DB, LINUX_STATE_DB_LOWER, MACOS_STATE_DB]
+    }
+    if (platform === "windows") {
+      return [WINDOWS_STATE_DB, LINUX_STATE_DB, MACOS_STATE_DB]
+    }
+    return [MACOS_STATE_DB, LINUX_STATE_DB, LINUX_STATE_DB_LOWER]
+  }
+
+  function readStateValue(ctx, key) {
+    var paths = getStateDbPaths(ctx)
+    var sql = "SELECT value FROM ItemTable WHERE key = '" + key + "' LIMIT 1"
+    var lastError = null
+    for (var i = 0; i < paths.length; i++) {
+      try {
+        var rows = ctx.host.sqlite.query(paths[i], sql)
+        var parsed = ctx.util.tryParseJson(rows)
+        if (parsed && parsed.length && parsed[0] && parsed[0].value) {
+          return parsed[0].value
+        }
+      } catch (e) {
+        lastError = e
+      }
+    }
+    if (lastError) {
+      ctx.host.log.warn("failed to read state key " + key + ": " + String(lastError))
+    }
+    return null
+  }
+
   function loadApiKey(ctx) {
     try {
-      var rows = ctx.host.sqlite.query(
-        STATE_DB,
-        "SELECT value FROM ItemTable WHERE key = 'antigravityAuthStatus' LIMIT 1"
-      )
-      var parsed = ctx.util.tryParseJson(rows)
-      if (!parsed || !parsed.length || !parsed[0].value) return null
-      var auth = ctx.util.tryParseJson(parsed[0].value)
+      var value = readStateValue(ctx, "antigravityAuthStatus")
+      if (!value) return null
+      var auth = ctx.util.tryParseJson(value)
       if (!auth || !auth.apiKey) return null
       return auth.apiKey
     } catch (e) {
@@ -82,13 +120,9 @@
 
   function loadProtoTokens(ctx) {
     try {
-      var rows = ctx.host.sqlite.query(
-        STATE_DB,
-        "SELECT value FROM ItemTable WHERE key = 'jetskiStateSync.agentManagerInitState' LIMIT 1"
-      )
-      var parsed = ctx.util.tryParseJson(rows)
-      if (!parsed || !parsed.length || !parsed[0].value) return null
-      var raw = ctx.base64.decode(parsed[0].value)
+      var value = readStateValue(ctx, "jetskiStateSync.agentManagerInitState")
+      if (!value) return null
+      var raw = ctx.base64.decode(value)
       var outer = readFields(raw)
       if (!outer[6] || outer[6].type !== 2) return null
       var inner = readFields(outer[6].data)
@@ -175,16 +209,33 @@
 
   // --- LS discovery ---
 
+  function getLsProcessNames(ctx) {
+    var platform = getPlatform(ctx)
+    if (platform === "linux") {
+      return ["language_server_linux", "language_server", "language_server_macos"]
+    }
+    if (platform === "windows") {
+      return ["language_server_windows.exe", "language_server.exe", "language_server"]
+    }
+    return ["language_server_macos", "language_server"]
+  }
+
   function discoverLs(ctx) {
-    return ctx.host.ls.discover({
-      processName: "language_server_macos",
-      markers: ["antigravity"],
-      csrfFlag: "--csrf_token",
-      portFlag: "--extension_server_port",
-    })
+    var processNames = getLsProcessNames(ctx)
+    for (var i = 0; i < processNames.length; i++) {
+      var discovery = ctx.host.ls.discover({
+        processName: processNames[i],
+        markers: ["antigravity"],
+        csrfFlag: "--csrf_token",
+        portFlag: "--extension_server_port",
+      })
+      if (discovery) return discovery
+    }
+    return null
   }
 
   function probePort(ctx, scheme, port, csrf) {
+    var platform = getPlatform(ctx)
     ctx.host.http.request({
       method: "POST",
       url: scheme + "://127.0.0.1:" + port + "/" + LS_SERVICE + "/GetUnleashData",
@@ -200,7 +251,7 @@
             extensionVersion: "unknown",
             ide: "antigravity",
             ideVersion: "unknown",
-            os: "macos",
+            os: platform,
           },
         },
       }),

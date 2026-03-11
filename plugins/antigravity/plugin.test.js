@@ -163,6 +163,35 @@ describe("antigravity plugin", () => {
     expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")
   })
 
+  it("uses the Linux Antigravity state DB path for offline credential fallback", async () => {
+    const ctx = makeCtx()
+    ctx.app.platform = "linux"
+
+    const queriedPaths = []
+    const futureExpiry = Math.floor(Date.now() / 1000) + 3600
+    const protoBase64 = makeProtobufBase64(ctx, "ya29.test-token", "1//refresh", futureExpiry)
+    ctx.host.sqlite.query.mockImplementation((db, sql) => {
+      queriedPaths.push(db)
+      if (db !== "~/.config/Antigravity/User/globalStorage/state.vscdb") return "[]"
+      if (sql.includes("agentManagerInitState")) return JSON.stringify([{ value: protoBase64 }])
+      if (sql.includes("antigravityAuthStatus")) return JSON.stringify([{ value: makeAuthStatusJson() }])
+      return "[]"
+    })
+    ctx.host.ls.discover.mockReturnValue(null)
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("fetchAvailableModels")) {
+        return { status: 200, bodyText: JSON.stringify(makeCloudCodeResponse()) }
+      }
+      return { status: 500, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(queriedPaths).toContain("~/.config/Antigravity/User/globalStorage/state.vscdb")
+    expect(result.lines.length).toBeGreaterThan(0)
+  })
+
   it("throws when no working port found and no DB credentials", async () => {
     const ctx = makeCtx()
     ctx.host.ls.discover.mockReturnValue(makeDiscovery())
@@ -398,6 +427,35 @@ describe("antigravity plugin", () => {
       { port: 10001, scheme: "http" },
       { port: 10002, scheme: "https" },
     ])
+  })
+
+  it("uses Linux LS process names and Linux OS metadata on Linux", async () => {
+    const ctx = makeCtx()
+    ctx.app.platform = "linux"
+
+    const discoverCalls = []
+    ctx.host.ls.discover.mockImplementation((opts) => {
+      discoverCalls.push(opts.processName)
+      if (opts.processName === "language_server_linux") return makeDiscovery({ ports: [42001] })
+      return null
+    })
+
+    let unleashOs = null
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url.includes("GetUnleashData")) {
+        unleashOs = JSON.parse(opts.bodyText).context.properties.os
+        return { status: 200, bodyText: "{}" }
+      }
+      return { status: 200, bodyText: JSON.stringify(makeUserStatusResponse()) }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(discoverCalls[0]).toBe("language_server_linux")
+    expect(unleashOs).toBe("linux")
+    expect(result.lines.length).toBeGreaterThan(0)
   })
 
   it("includes apiKey in LS metadata when DB has credentials", async () => {
