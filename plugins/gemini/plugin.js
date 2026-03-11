@@ -5,8 +5,25 @@
     "~/.bun/install/global/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
     "~/.npm-global/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
     "~/.nvm/versions/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "~/.local/share/mise/installs/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "~/.local/share/mise/installs/node/current/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "~/.volta/tools/image/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "~/.volta/tools/image/node/current/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "/usr/local/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "/usr/local/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "/usr/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "/usr/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
     "/opt/homebrew/opt/gemini-cli/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
     "/usr/local/opt/gemini-cli/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+  ]
+  const OAUTH2_VERSIONED_ROOTS = [
+    "~/.local/share/mise/installs/node",
+    "~/.nvm/versions/node",
+    "~/.volta/tools/image/node",
+  ]
+  const OAUTH2_VERSIONED_SUFFIXES = [
+    "/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
+    "/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
   ]
 
   const LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
@@ -35,7 +52,14 @@
   function assertSupportedAuthType(ctx) {
     const settings = loadSettings(ctx)
     const authType =
-      settings && typeof settings.authType === "string" ? settings.authType.trim().toLowerCase() : null
+      settings && typeof settings.authType === "string"
+        ? settings.authType.trim().toLowerCase()
+        : settings &&
+            settings.security &&
+            settings.security.auth &&
+            typeof settings.security.auth.selectedType === "string"
+          ? settings.security.auth.selectedType.trim().toLowerCase()
+          : null
 
     if (!authType || authType === "oauth-personal") return
     if (authType === "api-key") {
@@ -76,9 +100,36 @@
     return { clientId: idMatch[1], clientSecret: secretMatch[1] }
   }
 
+  function readDirNames(ctx, path) {
+    if (!ctx.host.fs || typeof ctx.host.fs.listDir !== "function") return []
+    try {
+      const entries = ctx.host.fs.listDir(path)
+      return Array.isArray(entries) ? entries : []
+    } catch (e) {
+      ctx.host.log.warn("failed listing oauth roots: " + String(e))
+      return []
+    }
+  }
+
+  function collectOauth2CandidatePaths(ctx) {
+    const paths = OAUTH2_JS_PATHS.slice()
+    for (let i = 0; i < OAUTH2_VERSIONED_ROOTS.length; i += 1) {
+      const root = OAUTH2_VERSIONED_ROOTS[i]
+      const entries = readDirNames(ctx, root)
+      for (let j = 0; j < entries.length; j += 1) {
+        const entry = entries[j]
+        for (let k = 0; k < OAUTH2_VERSIONED_SUFFIXES.length; k += 1) {
+          paths.push(root + "/" + entry + OAUTH2_VERSIONED_SUFFIXES[k])
+        }
+      }
+    }
+    return paths
+  }
+
   function loadOauthClientCreds(ctx) {
-    for (let i = 0; i < OAUTH2_JS_PATHS.length; i += 1) {
-      const path = OAUTH2_JS_PATHS[i]
+    const candidates = collectOauth2CandidatePaths(ctx)
+    for (let i = 0; i < candidates.length; i += 1) {
+      const path = candidates[i]
       if (!ctx.host.fs.exists(path)) continue
       try {
         const parsed = parseOauthClientCreds(ctx.host.fs.readText(path))

@@ -7,6 +7,8 @@ Tracks Gemini CLI usage through local OAuth credentials and Gemini quota APIs.
 - `~/.gemini/settings.json` for auth mode
 - `~/.gemini/oauth_creds.json` for OAuth tokens
 - Gemini CLI `oauth2.js` for OAuth client ID/secret
+  - exact global installs: Bun, npm-global, Homebrew, `/usr/local/lib/node_modules`, `/usr/lib/node_modules`
+  - versioned Linux installs: `mise`, `nvm`, `volta`
 
 ## Supported auth modes
 

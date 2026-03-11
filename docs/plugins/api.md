@@ -58,6 +58,7 @@ ctx.host.log.error("API request failed: " + error.message)
 host.fs.exists(path: string): boolean
 host.fs.readText(path: string): string   // Throws on error
 host.fs.writeText(path: string, content: string): void  // Throws on error
+host.fs.listDir(path: string): string[]  // Throws on error
 ```
 
 ### Path Expansion

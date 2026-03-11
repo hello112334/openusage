@@ -317,6 +317,26 @@ fn inject_fs<'js>(ctx: &Ctx<'js>, host: &Object<'js>) -> rquickjs::Result<()> {
         )?,
     )?;
 
+    fs_obj.set(
+        "listDir",
+        Function::new(
+            ctx.clone(),
+            move |ctx_inner: Ctx<'_>, path: String| -> rquickjs::Result<Vec<String>> {
+                let expanded = expand_path(&path);
+                let entries = std::fs::read_dir(&expanded)
+                    .map_err(|e| Exception::throw_message(&ctx_inner, &e.to_string()))?;
+                let mut names = Vec::new();
+                for entry in entries {
+                    let entry = entry
+                        .map_err(|e| Exception::throw_message(&ctx_inner, &e.to_string()))?;
+                    names.push(entry.file_name().to_string_lossy().to_string());
+                }
+                names.sort();
+                Ok(names)
+            },
+        )?,
+    )?;
+
     host.set("fs", fs_obj)?;
     Ok(())
 }

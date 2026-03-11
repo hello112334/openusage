@@ -98,3 +98,4 @@ Use below list to store and recall user notes when asked to do so.
 
 - Tauri IPC: JS must use camelCase (`{ batchId, pluginIds }`), Tauri auto-converts to Rust's snake_case. Never send snake_case from JS—params silently won't match.
 - tauri-action `latest.json`: Parallel matrix builds are safe—action fetches existing `latest.json`, merges platform entries, re-uploads. No `max-parallel: 1` needed.
+- `build-release.sh`: run from repo root via `bun run build:release` or `./scripts/build-release.sh [tauri args]`; it auto-loads `.env`, reads `TAURI_SIGNING_PRIVATE_KEY` from the file path in `.env`, clears `src-tauri/target/release/bundle`, then forwards args to `bun tauri build`.

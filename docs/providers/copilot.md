@@ -8,7 +8,8 @@ The plugin looks for a GitHub token in this order:
 
 1. **OpenUsage Keychain** (`OpenUsage-copilot`) — Token previously cached by the plugin
 2. **GitHub CLI Keychain** (`gh:github.com`) — Token from `gh auth login`
-3. **State File** (`auth.json`) — Fallback file-based storage
+3. **GitHub CLI hosts file** (`~/.config/gh/hosts.yml`) — Linux/file-backed `gh auth login` tokens
+4. **State File** (`auth.json`) — Fallback file-based storage
 
 ### Setup
 
@@ -22,7 +23,7 @@ brew install gh
 gh auth login
 ```
 
-Choose "GitHub.com" and follow the prompts. The plugin will automatically read the token from the gh CLI keychain.
+Choose "GitHub.com" and follow the prompts. The plugin will automatically read the token from the gh CLI keychain on macOS, or from `~/.config/gh/hosts.yml` on Linux when `gh` stores the token in its config file.
 
 Once authenticated via gh CLI, the plugin caches the token in the OpenUsage keychain for faster access on subsequent probes.
 

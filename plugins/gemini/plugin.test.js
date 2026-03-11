@@ -4,6 +4,8 @@ import { makeCtx } from "../test-helpers.js"
 const SETTINGS_PATH = "~/.gemini/settings.json"
 const CREDS_PATH = "~/.gemini/oauth_creds.json"
 const OAUTH2_PATH = "~/.bun/install/global/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js"
+const OAUTH2_MISE_PATH =
+  "~/.local/share/mise/installs/node/25.5.0/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js"
 
 const LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
 const QUOTA_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
@@ -231,5 +233,63 @@ describe("gemini plugin", () => {
 
     const plugin = await loadPlugin()
     expect(() => plugin.probe(ctx)).toThrow("session expired")
+  })
+
+  it("refreshes token using oauth2.js discovered under mise installs", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      SETTINGS_PATH,
+      JSON.stringify({
+        security: {
+          auth: {
+            selectedType: "oauth-personal",
+          },
+        },
+      })
+    )
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "old-token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs - 1000,
+      })
+    )
+    ctx.host.fs.writeText(
+      OAUTH2_MISE_PATH,
+      "const OAUTH_CLIENT_ID='client-id'; const OAUTH_CLIENT_SECRET='client-secret';"
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === TOKEN_URL) {
+        return { status: 200, bodyText: JSON.stringify({ access_token: "new-token", expires_in: 3600 }) }
+      }
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "standard-tier", cloudaicompanionProject: "gen-lang-client-123" }),
+        }
+      }
+      if (url === QUOTA_URL) {
+        expect(opts.headers.Authorization).toBe("Bearer new-token")
+        return {
+          status: 200,
+          bodyText: JSON.stringify({
+            quotaBuckets: [{ modelId: "gemini-2.5-pro", remainingFraction: 0.2, resetTime: "2099-01-01T00:00:00Z" }],
+          }),
+        }
+      }
+      throw new Error("unexpected url: " + url)
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.plan).toBe("Paid")
+    expect(result.lines.find((line) => line.label === "Pro")).toBeTruthy()
   })
 })

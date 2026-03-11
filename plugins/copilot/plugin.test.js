@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makePluginTestContext } from "../test-helpers.js";
 
+const GH_HOSTS_PATH = "~/.config/gh/hosts.yml";
+
 const loadPlugin = async () => {
   await import("./plugin.js");
   return globalThis.__openusage_plugin;
@@ -100,6 +102,28 @@ describe("copilot plugin", () => {
     expect(result.lines.find((l) => l.label === "Premium")).toBeTruthy();
     const call = ctx.host.http.request.mock.calls[0][0];
     expect(call.headers.Authorization).toBe("token gho_encoded_token");
+  });
+
+  it("loads token from gh hosts.yml when keychain is unavailable", async () => {
+    const ctx = makePluginTestContext({
+      app: { platform: "linux" },
+    });
+    ctx.host.fs.writeText(
+      GH_HOSTS_PATH,
+      [
+        "github.com:",
+        "    users:",
+        "        hello112334:",
+        "            oauth_token: gho_hosts_file_token",
+        "    user: hello112334",
+      ].join("\n"),
+    );
+    mockUsageOk(ctx);
+    const plugin = await loadPlugin();
+    const result = plugin.probe(ctx);
+    expect(result.lines.find((l) => l.label === "Premium")).toBeTruthy();
+    const call = ctx.host.http.request.mock.calls[0][0];
+    expect(call.headers.Authorization).toBe("token gho_hosts_file_token");
   });
 
   it("loads token from state file", async () => {

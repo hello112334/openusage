@@ -16,6 +16,17 @@ export const makeCtx = () => {
         exists: (path) => files.has(path),
         readText: (path) => files.get(path),
         writeText: vi.fn((path, text) => files.set(path, text)),
+        listDir: vi.fn((path) => {
+          const prefix = String(path).replace(/\/+$/, "") + "/"
+          const entries = new Set()
+          for (const filePath of files.keys()) {
+            if (!String(filePath).startsWith(prefix)) continue
+            const rest = String(filePath).slice(prefix.length)
+            const first = rest.split("/")[0]
+            if (first) entries.add(first)
+          }
+          return Array.from(entries).sort()
+        }),
       },
       env: {
         get: vi.fn(() => null),
