@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.sunstory.openusage</id>
+  <name>OpenUsage</name>
+  <summary>Track AI coding subscription usage from your Linux tray or desktop panel</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.hello112334">
+    <name>OpenUsage Linux Fork</name>
+  </developer>
+  <launchable type="desktop-id">OpenUsage.desktop</launchable>
+  <provides>
+    <binary>openusage</binary>
+  </provides>
+  <url type="homepage">https://github.com/hello112334/openusage</url>
+  <url type="bugtracker">https://github.com/hello112334/openusage/issues</url>
+  <description>
+    <p>OpenUsage is a Linux-first desktop app for tracking quota and usage data across AI coding providers from one local tray or desktop-panel interface.</p>
+    <p>This fork focuses on Linux packaging, Linux auth compatibility, and Linux runtime behavior while keeping the upstream plugin model and usage dashboard workflow.</p>
+  </description>
+  <categories>
+    <category>Development</category>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>AI</keyword>
+    <keyword>usage</keyword>
+    <keyword>quota</keyword>
+    <keyword>developer</keyword>
+    <keyword>tray</keyword>
+  </keywords>
+  <content_rating type="oars-1.1" />
+</component>

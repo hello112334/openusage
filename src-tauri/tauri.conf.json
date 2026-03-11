@@ -30,6 +30,19 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "hello112334",
+    "homepage": "https://github.com/hello112334/openusage",
+    "category": "DeveloperTool",
+    "shortDescription": "Track AI coding subscription usage from your Linux tray or desktop panel.",
+    "longDescription": "OpenUsage is a Linux-first desktop app for tracking quota and usage data across AI coding providers from one local tray or desktop-panel interface.",
+    "linux": {
+      "deb": {
+        "section": "devel",
+        "files": {
+          "/usr/share/metainfo/OpenUsage.metainfo.xml": "resources/linux/OpenUsage.metainfo.xml"
+        }
+      }
+    },
     "macOS": {
       "dmg": {
         "appPosition": {
