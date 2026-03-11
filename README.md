@@ -102,7 +102,7 @@ Behavior:
 
 - no argument: bumps the patch version from the latest `v*` git tag
 - with an argument: uses that exact version
-- syncs `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+- syncs `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`
 - creates `version/vX.Y.Z.md`
 - commits the release, creates the tag, and pushes the branch plus tag to `origin`
 

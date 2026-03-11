@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 PACKAGE_JSON="package.json"
 TAURI_CONF="src-tauri/tauri.conf.json"
 CARGO_TOML="src-tauri/Cargo.toml"
+CARGO_LOCK="src-tauri/Cargo.lock"
 VERSION_DIR="version"
 
 fail() {
@@ -109,6 +110,22 @@ if (nextCargoText === cargoText) {
 }
 
 fs.writeFileSync(cargoPath, nextCargoText);
+
+const lockPath = "src-tauri/Cargo.lock";
+if (fs.existsSync(lockPath)) {
+  const lockText = fs.readFileSync(lockPath, "utf8");
+  const nextLockText = lockText.replace(
+    /(\[\[package\]\]\nname = "openusage"\nversion = ")[^"]+(")/,
+    `$1${version}$2`,
+  );
+
+  if (nextLockText === lockText) {
+    console.error(`Error: Failed to update version in ${lockPath}`);
+    process.exit(1);
+  }
+
+  fs.writeFileSync(lockPath, nextLockText);
+}
 NODE
 }
 
@@ -153,6 +170,9 @@ main() {
   create_version_note "$tag_version"
 
   git add "$PACKAGE_JSON" "$TAURI_CONF" "$CARGO_TOML" "$VERSION_DIR/$tag_version.md"
+  if [[ -f "$CARGO_LOCK" ]]; then
+    git add "$CARGO_LOCK"
+  fi
   git commit -m "chore(release): $tag_version"
   git tag -a "$tag_version" -m "$tag_version"
   git push origin "$current_branch" "$tag_version"
