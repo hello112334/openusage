@@ -126,6 +126,26 @@ describe("copilot plugin", () => {
     expect(call.headers.Authorization).toBe("token gho_hosts_file_token");
   });
 
+  it("throws a specific message when gh hosts has an account but no usable token", async () => {
+    const ctx = makePluginTestContext({
+      app: { platform: "linux" },
+    });
+    ctx.host.fs.writeText(
+      GH_HOSTS_PATH,
+      [
+        "github.com:",
+        "    git_protocol: https",
+        "    users:",
+        "        hello112334:",
+        "    user: hello112334",
+      ].join("\n"),
+    );
+    const plugin = await loadPlugin();
+    expect(() => plugin.probe(ctx)).toThrow(
+      "GitHub CLI account `hello112334` found, but no usable token was available.",
+    );
+  });
+
   it("loads token from state file", async () => {
     const ctx = makePluginTestContext();
     setStateFileToken(ctx, "ghu_state");

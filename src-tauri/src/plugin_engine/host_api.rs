@@ -5,6 +5,7 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
 const WHITELISTED_ENV_VARS: [&str; 3] = ["CODEX_HOME", "ZAI_API_KEY", "GLM_API_KEY"];
+const GH_CLI_KEYCHAIN_SERVICE: &str = "gh:github.com";
 
 fn last_non_empty_trimmed_line(text: &str) -> Option<String> {
     text.lines()
@@ -31,6 +32,10 @@ fn read_env_value_via_command(program: &str, args: &[&str]) -> Option<String> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     last_non_empty_trimmed_line(&stdout)
+}
+
+fn read_gh_auth_token_via_cli() -> Option<String> {
+    read_env_value_via_command("gh", &["auth", "token", "-h", "github.com"])
 }
 
 fn terminal_env_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
@@ -1125,6 +1130,15 @@ fn inject_keychain<'js>(ctx: &Ctx<'js>, host: &Object<'js>) -> rquickjs::Result<
             ctx.clone(),
             move |ctx_inner: Ctx<'_>, service: String| -> rquickjs::Result<String> {
                 if !cfg!(target_os = "macos") {
+                    if service == GH_CLI_KEYCHAIN_SERVICE {
+                        if let Some(token) = read_gh_auth_token_via_cli() {
+                            return Ok(token);
+                        }
+                        return Err(Exception::throw_message(
+                            &ctx_inner,
+                            "gh auth token failed or returned no token",
+                        ));
+                    }
                     return Err(Exception::throw_message(
                         &ctx_inner,
                         "keychain API is only supported on macOS",

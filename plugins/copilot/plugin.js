@@ -88,10 +88,12 @@
     return trimmed || null;
   }
 
-  function parseGhHostsToken(text) {
+  function parseGhHostsInfo(text) {
     if (typeof text !== "string" || !text.trim()) return null;
     const lines = text.split(/\r?\n/);
     let inGithubBlock = false;
+    let token = null;
+    let user = null;
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
       const trimmed = line.trim();
@@ -101,16 +103,30 @@
       }
       if (line && !/^\s/.test(line)) break;
       if (trimmed.indexOf("oauth_token:") === 0) {
-        return normalizeToken(trimmed.slice("oauth_token:".length));
+        token = normalizeToken(trimmed.slice("oauth_token:".length));
+      }
+      if (trimmed.indexOf("user:") === 0) {
+        user = normalizeToken(trimmed.slice("user:".length));
       }
     }
-    return null;
+    if (!token && !user) return null;
+    return { token: token, user: user };
+  }
+
+  function loadGhHostsInfo(ctx) {
+    try {
+      if (!ctx.host.fs.exists(GH_HOSTS_PATH)) return null;
+      return parseGhHostsInfo(ctx.host.fs.readText(GH_HOSTS_PATH));
+    } catch (e) {
+      ctx.host.log.info("gh hosts file read failed: " + String(e));
+      return null;
+    }
   }
 
   function loadTokenFromGhHostsFile(ctx) {
     try {
-      if (!ctx.host.fs.exists(GH_HOSTS_PATH)) return null;
-      const token = parseGhHostsToken(ctx.host.fs.readText(GH_HOSTS_PATH));
+      const info = loadGhHostsInfo(ctx);
+      const token = info && info.token;
       if (token) {
         ctx.host.log.info("token loaded from gh hosts file");
         return { token: token, source: "gh-hosts" };
@@ -187,6 +203,14 @@
   function probe(ctx) {
     const cred = loadToken(ctx);
     if (!cred) {
+      const ghHosts = loadGhHostsInfo(ctx);
+      if (ghHosts && ghHosts.user && !ghHosts.token) {
+        throw (
+          "GitHub CLI account `" +
+          ghHosts.user +
+          "` found, but no usable token was available. Run `gh auth login -h github.com` to re-authenticate."
+        );
+      }
       throw "Not logged in. Run `gh auth login` first.";
     }
 

@@ -7,7 +7,7 @@ Tracks GitHub Copilot usage quotas for both paid and free tier users.
 The plugin looks for a GitHub token in this order:
 
 1. **OpenUsage Keychain** (`OpenUsage-copilot`) — Token previously cached by the plugin
-2. **GitHub CLI Keychain** (`gh:github.com`) — Token from `gh auth login`
+2. **GitHub CLI token** (`gh auth token -h github.com`) — Standard `gh auth login` storage, including Linux keyring-backed logins
 3. **GitHub CLI hosts file** (`~/.config/gh/hosts.yml`) — Linux/file-backed `gh auth login` tokens
 4. **State File** (`auth.json`) — Fallback file-based storage
 
@@ -24,6 +24,12 @@ gh auth login
 ```
 
 Choose "GitHub.com" and follow the prompts. The plugin will automatically read the token from the gh CLI keychain on macOS, or from `~/.config/gh/hosts.yml` on Linux when `gh` stores the token in its config file.
+
+On Linux, OpenUsage also tries `gh auth token -h github.com`, so normal `gh auth login` setups that store the token outside `hosts.yml` can still be detected. If `gh auth status` reports an invalid or missing token, re-run:
+
+```bash
+gh auth login -h github.com
+```
 
 Once authenticated via gh CLI, the plugin caches the token in the OpenUsage keychain for faster access on subsequent probes.
 
@@ -99,6 +105,7 @@ All progress lines include:
 | Condition       | Message                                           |
 |-----------------|---------------------------------------------------|
 | No token found  | "Not logged in. Run `gh auth login` first."       |
+| Account found, token unusable | "GitHub CLI account `...` found, but no usable token was available..." |
 | 401/403         | "Token invalid. Run `gh auth login` to re-auth."  |
 | HTTP error      | "Usage request failed (HTTP {status})..."         |
 | Network error   | "Usage request failed. Check your connection."    |
