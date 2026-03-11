@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi, beforeEach } from "vitest"
@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   isTauriMock: vi.fn(() => false),
   trackMock: vi.fn(),
   setSizeMock: vi.fn(),
+  startDraggingMock: vi.fn(),
   currentMonitorMock: vi.fn(),
   startBatchMock: vi.fn(),
   savePluginSettingsMock: vi.fn(),
@@ -119,7 +120,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }))
 
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ setSize: state.setSizeMock }),
+  getCurrentWindow: () => ({ setSize: state.setSizeMock, startDragging: state.startDraggingMock }),
   PhysicalSize: class {
     width: number
     height: number
@@ -196,6 +197,7 @@ describe("App", () => {
     state.isTauriMock.mockReturnValue(false)
     state.trackMock.mockReset()
     state.setSizeMock.mockReset()
+    state.startDraggingMock.mockReset()
     state.currentMonitorMock.mockReset()
     state.startBatchMock.mockReset()
     state.savePluginSettingsMock.mockReset()
@@ -376,6 +378,12 @@ describe("App", () => {
 
     await waitFor(() => expect(state.renderTrayBarsIconMock.mock.calls.length).toBeGreaterThan(callsBefore))
     await waitFor(() => expect(state.traySetIconMock).toHaveBeenCalled())
+  })
+
+  it("uses non-template tray icons by default on Linux-like user agents", async () => {
+    render(<App />)
+
+    await waitFor(() => expect(state.traySetIconAsTemplateMock).toHaveBeenCalledWith(false))
   })
 
   it("uses one metric for circle tray style", async () => {
@@ -666,6 +674,33 @@ describe("App", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
 
     await waitFor(() => expect(state.invokeMock).toHaveBeenCalledWith("hide_panel"))
+  })
+
+  it("renders a draggable header and hides the panel from the close button in Tauri", async () => {
+    state.isTauriMock.mockReturnValue(true)
+    render(<App />)
+
+    await waitFor(() => expect(state.invokeMock).toHaveBeenCalledWith("list_plugins"))
+
+    const title = screen.getByText("OpenUsage")
+    expect(title.parentElement).toHaveAttribute("data-tauri-drag-region")
+
+    await userEvent.click(screen.getByRole("button", { name: "Close window" }))
+
+    await waitFor(() => expect(state.invokeMock).toHaveBeenCalledWith("hide_panel"))
+  })
+
+  it("starts dragging the window from the header in Tauri", async () => {
+    state.isTauriMock.mockReturnValue(true)
+    state.startDraggingMock.mockResolvedValue(undefined)
+    render(<App />)
+
+    await waitFor(() => expect(state.invokeMock).toHaveBeenCalledWith("list_plugins"))
+
+    const title = screen.getByText("OpenUsage")
+    fireEvent.mouseDown(title.parentElement!, { button: 0 })
+
+    await waitFor(() => expect(state.startDraggingMock).toHaveBeenCalled())
   })
 
   it("toggles plugins in settings", async () => {

@@ -152,6 +152,33 @@ describe("tray-bars-icon", () => {
     expect(svg).toContain("<circle ")
   })
 
+  it("uses a colored palette when template mode is disabled", () => {
+    const svg = makeTrayBarsSvg({
+      sizePx: 36,
+      bars: [{ id: "a", fraction: 0.5 }],
+      percentText: "50%",
+      templateMode: false,
+    })
+
+    expect(svg).toContain('fill="#CDFD51"')
+    expect(svg).toContain('fill="#D9FF79"')
+    expect(svg).not.toContain('fill="black"')
+  })
+
+  it("adds a colored background behind provider icons when template mode is disabled", () => {
+    const svg = makeTrayBarsSvg({
+      sizePx: 36,
+      style: "provider",
+      providerIconUrl: "data:image/svg+xml;base64,ABC",
+      bars: [{ id: "a", fraction: 0.5 }],
+      templateMode: false,
+    })
+
+    expect(svg).toContain('<rect ')
+    expect(svg).toContain('fill="#CDFD51"')
+    expect(svg).toContain("<image ")
+  })
+
   it("renderTrayBarsIcon rasterizes SVG to an Image using canvas", async () => {
     const originalImage = window.Image
     const originalCreateElement = document.createElement.bind(document)

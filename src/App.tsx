@@ -68,12 +68,23 @@ const MAX_HEIGHT_FRACTION_OF_MONITOR = 0.8;
 const ARROW_OVERHEAD_PX = 37; // .tray-arrow (7px) + wrapper pt-1.5 (6px) + bottom p-6 (24px)
 const TRAY_SETTINGS_DEBOUNCE_MS = 2000;
 const TRAY_PROBE_DEBOUNCE_MS = 500;
+const MACOS_TRAY_ICON_RESOURCE = "icons/tray-icon.png"
+const DEFAULT_TRAY_ICON_RESOURCE = "icons/32x32.png"
 
 type PluginState = {
   data: PluginOutput | null
   loading: boolean
   error: string | null
   lastManualRefreshAt: number | null
+}
+
+function shouldUseTemplateTrayIcons(): boolean {
+  if (typeof navigator === "undefined") return false
+  return /\bMacintosh\b|\bMac OS X\b|\bDarwin\b/i.test(navigator.userAgent)
+}
+
+function getDefaultTrayIconResource(useTemplateTrayIcon: boolean): string {
+  return useTemplateTrayIcon ? MACOS_TRAY_ICON_RESOURCE : DEFAULT_TRAY_ICON_RESOURCE
 }
 
 function App() {
@@ -110,6 +121,7 @@ function App() {
   const trayUpdateTimerRef = useRef<number | null>(null)
   const trayUpdatePendingRef = useRef(false)
   const [trayReady, setTrayReady] = useState(false)
+  const useTemplateTrayIcon = shouldUseTemplateTrayIcons()
 
   // Store state in refs so scheduleTrayIconUpdate can read current values without recreating the callback
   const pluginsMetaRef = useRef(pluginsMeta)
@@ -164,7 +176,7 @@ function App() {
         if (gaugePath) {
           Promise.all([
             tray.setIcon(gaugePath),
-            tray.setIconAsTemplate(true),
+            tray.setIconAsTemplate(useTemplateTrayIcon),
           ])
             .catch((e) => {
               console.error("Failed to restore tray gauge icon:", e)
@@ -195,7 +207,7 @@ function App() {
         if (gaugePath) {
           Promise.all([
             tray.setIcon(gaugePath),
-            tray.setIconAsTemplate(true),
+            tray.setIconAsTemplate(useTemplateTrayIcon),
           ])
             .catch((e) => {
               console.error("Failed to restore tray gauge icon:", e)
@@ -216,10 +228,10 @@ function App() {
           ? pluginsMetaRef.current.find((plugin) => plugin.id === firstProviderId)?.iconUrl
           : undefined
 
-      renderTrayBarsIcon({ bars, sizePx, style, percentText, providerIconUrl })
+      renderTrayBarsIcon({ bars, sizePx, style, percentText, providerIconUrl, templateMode: useTemplateTrayIcon })
         .then(async (img) => {
           await tray.setIcon(img)
-          await tray.setIconAsTemplate(true)
+          await tray.setIconAsTemplate(useTemplateTrayIcon)
         })
         .catch((e) => {
           console.error("Failed to update tray icon:", e)
@@ -243,7 +255,7 @@ function App() {
         trayInitializedRef.current = true
         setTrayReady(true)
         try {
-          trayGaugeIconPathRef.current = await resolveResource("icons/tray-icon.png")
+          trayGaugeIconPathRef.current = await resolveResource(getDefaultTrayIconResource(useTemplateTrayIcon))
         } catch (e) {
           console.error("Failed to resolve tray gauge icon resource:", e)
         }
@@ -254,7 +266,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [useTemplateTrayIcon])
 
   // Trigger tray update once tray + plugin metadata/settings are available.
   // This prevents missing the first paint if probe results arrive before the tray handle resolves.
@@ -308,6 +320,21 @@ function App() {
     return displayPlugins.find((p) => p.meta.id === activeView) ?? null
   }, [activeView, displayPlugins])
 
+  const hidePanel = useCallback(() => {
+    if (!isTauri()) return
+    void invoke("hide_panel").catch((error) => {
+      console.error("Failed to hide panel:", error)
+    })
+  }, [])
+
+  const handleWindowDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isTauri()) return
+    if (event.button !== 0) return
+
+    void getCurrentWindow().startDragging().catch((error) => {
+      console.error("Failed to start window drag:", error)
+    })
+  }, [])
 
   // Initialize panel on mount
   useEffect(() => {
@@ -321,12 +348,12 @@ function App() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        invoke("hide_panel")
+        hidePanel()
       }
     }
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [showAbout])
+  }, [hidePanel, showAbout])
 
   // Listen for tray menu events
   useEffect(() => {
@@ -986,6 +1013,25 @@ function App() {
         className="relative bg-card rounded-xl overflow-hidden select-none w-full border shadow-lg flex flex-col"
         style={maxPanelHeightPx ? { maxHeight: `${maxPanelHeightPx - ARROW_OVERHEAD_PX}px` } : undefined}
       >
+        <div className="flex items-center gap-2 border-b bg-card/95 px-3 py-2 dark:bg-muted/60">
+          <div
+            data-tauri-drag-region
+            className="flex min-w-0 flex-1 items-center cursor-move"
+            onMouseDown={handleWindowDragStart}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+              OpenUsage
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close window"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            onClick={hidePanel}
+          >
+            X
+          </button>
+        </div>
         <div className="flex flex-1 min-h-0 flex-row">
           <SideNav
             activeView={activeView}

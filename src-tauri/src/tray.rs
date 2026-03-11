@@ -44,9 +44,15 @@ fn set_stored_log_level(app_handle: &AppHandle, level: log::LevelFilter) {
 }
 
 pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
+    let use_template_icon = cfg!(target_os = "macos");
+    let tray_icon_resource = if use_template_icon {
+        "icons/tray-icon.png"
+    } else {
+        "icons/32x32.png"
+    };
     let tray_icon_path = app_handle
         .path()
-        .resolve("icons/tray-icon.png", BaseDirectory::Resource)?;
+        .resolve(tray_icon_resource, BaseDirectory::Resource)?;
     let icon = Image::from_path(tray_icon_path)?;
 
     // Load persisted log level
@@ -86,7 +92,7 @@ pub fn create(app_handle: &AppHandle) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("tray")
         .icon(icon)
-        .icon_as_template(true)
+        .icon_as_template(use_template_icon)
         .tooltip("OpenUsage")
         .menu(&menu)
         .show_menu_on_left_click(false)

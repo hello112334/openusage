@@ -3,6 +3,15 @@ import { Image } from "@tauri-apps/api/image"
 import type { TrayPrimaryBar } from "@/lib/tray-primary-progress"
 import type { TrayIconStyle } from "@/lib/settings"
 
+type TrayColorPalette = {
+  ink: string
+  track: string
+  fill: string
+  remainder: string
+  accent: string
+  text: string
+}
+
 function rgbaToImageDataBytes(rgba: Uint8ClampedArray): Uint8Array {
   // Image.new expects Uint8Array. Uint8ClampedArray shares the same buffer layout.
   return new Uint8Array(rgba.buffer)
@@ -54,6 +63,28 @@ function normalizePercentText(style: TrayIconStyle, percentText: string | undefi
 function getBarsForStyle(style: TrayIconStyle, bars: TrayPrimaryBar[]): TrayPrimaryBar[] {
   if (style === "circle" || style === "provider" || style === "textOnly") return bars.slice(0, 1)
   return bars
+}
+
+function getTrayPalette(templateMode: boolean): TrayColorPalette {
+  if (templateMode) {
+    return {
+      ink: "black",
+      track: "black",
+      fill: "black",
+      remainder: "black",
+      accent: "black",
+      text: "black",
+    }
+  }
+
+  return {
+    ink: "#4F6E12",
+    track: "#4F6E12",
+    fill: "#CDFD51",
+    remainder: "#95C638",
+    accent: "#CDFD51",
+    text: "#D9FF79",
+  }
 }
 
 function getMinVisibleRemainderPx(trackW: number): number {
@@ -183,9 +214,11 @@ export function makeTrayBarsSvg(args: {
   style?: TrayIconStyle
   percentText?: string
   providerIconUrl?: string
+  templateMode?: boolean
 }): string {
-  const { bars, sizePx, style = "bars", percentText, providerIconUrl } = args
+  const { bars, sizePx, style = "bars", percentText, providerIconUrl, templateMode = true } = args
   const barsForStyle = getBarsForStyle(style, bars)
+  const palette = getTrayPalette(templateMode)
   const n = Math.max(1, Math.min(4, barsForStyle.length || 1))
   const text = normalizePercentText(style, percentText)
   const layout = getSvgLayout({
@@ -228,7 +261,7 @@ export function makeTrayBarsSvg(args: {
     const radius = Math.max(1, Math.floor(chartSize / 2 - strokeW / 2) + 0.5)
 
     parts.push(
-      `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="black" stroke-width="${strokeW}" opacity="${trackOpacity}" shape-rendering="geometricPrecision" />`
+      `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${palette.track}" stroke-width="${strokeW}" opacity="${trackOpacity}" shape-rendering="geometricPrecision" />`
     )
 
     const fraction = barsForStyle[0]?.fraction
@@ -238,7 +271,7 @@ export function makeTrayBarsSvg(args: {
         const circumference = 2 * Math.PI * radius
         const dash = circumference * clamped
         parts.push(
-          `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="black" stroke-width="${strokeW}" stroke-linecap="butt" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${cx} ${cy})" opacity="${fillOpacity}" shape-rendering="geometricPrecision" />`
+          `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${palette.fill}" stroke-width="${strokeW}" stroke-linecap="butt" stroke-dasharray="${dash} ${circumference}" transform="rotate(-90 ${cx} ${cy})" opacity="${fillOpacity}" shape-rendering="geometricPrecision" />`
         )
       }
     }
@@ -247,6 +280,16 @@ export function makeTrayBarsSvg(args: {
     const x = layout.barsX
     const y = Math.round((height - iconSize) / 2) + 1
     const href = typeof providerIconUrl === "string" ? providerIconUrl.trim() : ""
+
+    if (!templateMode) {
+      const bgSize = Math.max(6, Math.round(iconSize * 0.9))
+      const bgX = x + Math.round((iconSize - bgSize) / 2)
+      const bgY = y + Math.round((iconSize - bgSize) / 2)
+      const bgRadius = Math.max(2, Math.round(bgSize * 0.28))
+      parts.push(
+        `<rect x="${bgX}" y="${bgY}" width="${bgSize}" height="${bgSize}" rx="${bgRadius}" fill="${palette.accent}" opacity="${fillOpacity}" />`
+      )
+    }
 
     if (href.length > 0) {
       parts.push(
@@ -258,7 +301,7 @@ export function makeTrayBarsSvg(args: {
       const radius = Math.max(2, iconSize / 2 - 1.5)
       const strokeW = Math.max(1.5, Math.round(iconSize * 0.14))
       parts.push(
-        `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="black" stroke-width="${strokeW}" opacity="${fillOpacity}" shape-rendering="geometricPrecision" />`
+        `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${palette.ink}" stroke-width="${strokeW}" opacity="${fillOpacity}" shape-rendering="geometricPrecision" />`
       )
     }
   } else if (style !== "textOnly") {
@@ -269,7 +312,7 @@ export function makeTrayBarsSvg(args: {
 
       // Track
       parts.push(
-        `<rect x="${x}" y="${y}" width="${trackW}" height="${trackH}" rx="${rx}" fill="black" opacity="${trackOpacity}" />`
+        `<rect x="${x}" y="${y}" width="${trackW}" height="${trackH}" rx="${rx}" fill="${palette.track}" opacity="${trackOpacity}" />`
       )
 
       const fraction = bar?.fraction
@@ -279,7 +322,7 @@ export function makeTrayBarsSvg(args: {
           const movingEdgeRadius = Math.max(0, Math.floor(rx * 0.35))
           if (fillW >= trackW) {
             parts.push(
-              `<rect x="${x}" y="${y}" width="${fillW}" height="${trackH}" rx="${rx}" fill="black" opacity="${fillOpacity}" />`
+              `<rect x="${x}" y="${y}" width="${fillW}" height="${trackH}" rx="${rx}" fill="${palette.fill}" opacity="${fillOpacity}" />`
             )
           } else {
             const fillPath = makeRoundedBarPath({
@@ -290,7 +333,7 @@ export function makeTrayBarsSvg(args: {
               leftRadius: rx,
               rightRadius: movingEdgeRadius,
             })
-            parts.push(`<path d="${fillPath}" fill="black" opacity="${fillOpacity}" />`)
+            parts.push(`<path d="${fillPath}" fill="${palette.fill}" opacity="${fillOpacity}" />`)
           }
         }
 
@@ -304,7 +347,7 @@ export function makeTrayBarsSvg(args: {
             leftRadius: Math.max(0, Math.floor(rx * 0.2)),
             rightRadius: rx,
           })
-          parts.push(`<path d="${remainderPath}" fill="black" opacity="${remainderOpacity}" />`)
+          parts.push(`<path d="${remainderPath}" fill="${palette.remainder}" opacity="${remainderOpacity}" />`)
         }
       }
     }
@@ -312,7 +355,7 @@ export function makeTrayBarsSvg(args: {
 
   if (text) {
     parts.push(
-      `<text x="${layout.textX}" y="${layout.textY}" fill="black" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif" font-size="${layout.fontSize}" font-weight="700" dominant-baseline="middle">${escapeXmlText(text)}</text>`
+      `<text x="${layout.textX}" y="${layout.textY}" fill="${palette.text}" font-family="-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif" font-size="${layout.fontSize}" font-weight="700" dominant-baseline="middle">${escapeXmlText(text)}</text>`
     )
   }
 
@@ -359,8 +402,9 @@ export async function renderTrayBarsIcon(args: {
   style?: TrayIconStyle
   percentText?: string
   providerIconUrl?: string
+  templateMode?: boolean
 }): Promise<Image> {
-  const { bars, sizePx, style = "bars", percentText, providerIconUrl } = args
+  const { bars, sizePx, style = "bars", percentText, providerIconUrl, templateMode } = args
   const text = normalizePercentText(style, percentText)
   const svg = makeTrayBarsSvg({
     bars,
@@ -368,6 +412,7 @@ export async function renderTrayBarsIcon(args: {
     style,
     percentText: text,
     providerIconUrl,
+    templateMode,
   })
   const layout = getSvgLayout({
     sizePx,
