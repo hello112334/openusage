@@ -9,9 +9,6 @@
     "https://cloudcode-pa.googleapis.com",
   ]
   var FETCH_MODELS_PATH = "/v1internal:fetchAvailableModels"
-  var GOOGLE_OAUTH_URL = "https://oauth2.googleapis.com/token"
-  var GOOGLE_CLIENT_ID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
-  var GOOGLE_CLIENT_SECRET = "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"
   var CC_MODEL_BLACKLIST = {
     "MODEL_CHAT_20706": true,
     "MODEL_CHAT_23310": true,
@@ -127,54 +124,15 @@
       if (!outer[6] || outer[6].type !== 2) return null
       var inner = readFields(outer[6].data)
       var accessToken = (inner[1] && inner[1].type === 2) ? inner[1].data : null
-      var refreshToken = (inner[3] && inner[3].type === 2) ? inner[3].data : null
       var expirySeconds = null
       if (inner[4] && inner[4].type === 2) {
         var ts = readFields(inner[4].data)
         if (ts[1] && ts[1].type === 0) expirySeconds = ts[1].value
       }
       if (!accessToken) return null
-      return { accessToken: accessToken, refreshToken: refreshToken, expirySeconds: expirySeconds }
+      return { accessToken: accessToken, expirySeconds: expirySeconds }
     } catch (e) {
       ctx.host.log.warn("failed to read proto tokens from antigravity DB: " + String(e))
-      return null
-    }
-  }
-
-  // --- Google OAuth token refresh ---
-
-  function refreshAccessToken(ctx, refreshTokenValue) {
-    if (!refreshTokenValue) {
-      ctx.host.log.warn("refresh skipped: no refresh token")
-      return null
-    }
-    ctx.host.log.info("attempting Google OAuth token refresh")
-    try {
-      var resp = ctx.host.http.request({
-        method: "POST",
-        url: GOOGLE_OAUTH_URL,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        bodyText:
-          "client_id=" + encodeURIComponent(GOOGLE_CLIENT_ID) +
-          "&client_secret=" + encodeURIComponent(GOOGLE_CLIENT_SECRET) +
-          "&refresh_token=" + encodeURIComponent(refreshTokenValue) +
-          "&grant_type=refresh_token",
-        timeoutMs: 15000,
-      })
-      if (resp.status < 200 || resp.status >= 300) {
-        ctx.host.log.warn("Google OAuth refresh returned status: " + resp.status)
-        return null
-      }
-      var body = ctx.util.tryParseJson(resp.bodyText)
-      if (!body || !body.access_token) {
-        ctx.host.log.warn("Google OAuth refresh response missing access_token")
-        return null
-      }
-      var expiresIn = (typeof body.expires_in === "number") ? body.expires_in : 3600
-      cacheToken(ctx, body.access_token, expiresIn)
-      return body.access_token
-    } catch (e) {
-      ctx.host.log.warn("Google OAuth refresh failed: " + String(e))
       return null
     }
   }
@@ -192,18 +150,6 @@
     } catch (e) {
       ctx.host.log.warn("failed to read cached token: " + String(e))
       return null
-    }
-  }
-
-  function cacheToken(ctx, accessToken, expiresInSeconds) {
-    var path = ctx.app.pluginDataDir + "/auth.json"
-    try {
-      ctx.host.fs.writeText(path, JSON.stringify({
-        accessToken: accessToken,
-        expiresAtMs: Date.now() + (expiresInSeconds || 3600) * 1000,
-      }))
-    } catch (e) {
-      ctx.host.log.warn("failed to cache refreshed token: " + String(e))
     }
   }
 
@@ -503,11 +449,6 @@
       ccData = probeCloudCode(ctx, tokens[i])
       if (ccData && !ccData._authFailed) break
       ccData = null
-    }
-
-    if (!ccData && proto && proto.refreshToken) {
-      var refreshed = refreshAccessToken(ctx, proto.refreshToken)
-      if (refreshed) ccData = probeCloudCode(ctx, refreshed)
     }
 
     if (ccData && !ccData._authFailed) {

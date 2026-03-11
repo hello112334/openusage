@@ -195,23 +195,7 @@ message Timestamp {
 }
 ```
 
-The plugin decodes this using a minimal protobuf wire-format parser (varint + length-delimited only). The access token is short-lived; the refresh token is used to obtain new access tokens via Google OAuth.
-
-### Token Refresh
-
-```
-POST https://oauth2.googleapis.com/token
-Content-Type: application/x-www-form-urlencoded
-
-client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com
-&client_secret=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
-&refresh_token=<refresh_token>
-&grant_type=refresh_token
-```
-
-Response: `{ "access_token": "ya29...", "expires_in": 3599 }`
-
-Same client_id/secret is there in the Antigravity app bundle, used for the Google OAuth refresh token.
+The plugin decodes this using a minimal protobuf wire-format parser (varint + length-delimited only). OpenUsage only uses the local `access_token` plus its expiry. The protobuf `refresh_token` may exist in the Antigravity data, but OpenUsage intentionally ignores it so the app does not need to ship Google OAuth client credentials.
 
 ## Cloud Code API (fallback)
 
@@ -248,7 +232,7 @@ Base URLs tried in order:
 }
 ```
 
-Returns 401/403 if the token is invalid or expired — triggers reactive refresh.
+Returns 401/403 if the token is invalid or expired.
 
 The response includes all models provisioned for the account. The plugin filters out non-user-facing models using three layers: (1) `isInternal: true` flag from the API, (2) empty `displayName` (catches internal autocomplete models like `chat_20706`, `tab_flash_lite_preview`), and (3) a model-ID blacklist (catches Gemini 2.5 variants and placeholders).
 
@@ -265,8 +249,7 @@ The Cloud Code model set is a superset of the LS model set. The LS returns only 
    d. Call `GetUserStatus` for plan name + per-model quota
    e. Fall back to `GetCommandModelConfigs` if `GetUserStatus` fails
 4. **Strategy 2 — Cloud Code API (fallback, only if LS fails):**
-   a. Build candidate token list: proto access_token, cached refreshed token (if fresh), apiKey (all deduplicated)
+   a. Build candidate token list: proto access_token, legacy cached token (if fresh), apiKey (all deduplicated)
    b. Try each token with `fetchAvailableModels`
-   c. If all fail with 401/403 and refresh token available: refresh via Google OAuth, cache result to pluginDataDir, retry once
-   d. Parse model quota: skip `isInternal` models, empty-displayName models, and blacklisted model IDs
+   c. Parse model quota: skip `isInternal` models, empty-displayName models, and blacklisted model IDs
 5. If both strategies fail: error "Start Antigravity and try again."

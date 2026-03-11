@@ -1,35 +1,9 @@
 (function () {
   const SETTINGS_PATH = "~/.gemini/settings.json"
   const CREDS_PATH = "~/.gemini/oauth_creds.json"
-  const OAUTH2_JS_PATHS = [
-    "~/.bun/install/global/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.npm-global/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.nvm/versions/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.local/share/mise/installs/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.local/share/mise/installs/node/current/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.volta/tools/image/node/current/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "~/.volta/tools/image/node/current/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/usr/local/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/usr/local/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/usr/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/usr/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/opt/homebrew/opt/gemini-cli/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/usr/local/opt/gemini-cli/libexec/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-  ]
-  const OAUTH2_VERSIONED_ROOTS = [
-    "~/.local/share/mise/installs/node",
-    "~/.nvm/versions/node",
-    "~/.volta/tools/image/node",
-  ]
-  const OAUTH2_VERSIONED_SUFFIXES = [
-    "/lib/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-    "/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/code_assist/oauth2.js",
-  ]
-
   const LOAD_CODE_ASSIST_URL = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
   const QUOTA_URL = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota"
   const PROJECTS_URL = "https://cloudresourcemanager.googleapis.com/v1/projects"
-  const TOKEN_URL = "https://oauth2.googleapis.com/token"
   const REFRESH_BUFFER_MS = 5 * 60 * 1000
 
   const IDE_METADATA = {
@@ -76,69 +50,12 @@
     try {
       const parsed = ctx.util.tryParseJson(ctx.host.fs.readText(CREDS_PATH))
       if (!parsed || typeof parsed !== "object") return null
-      if (!parsed.access_token && !parsed.refresh_token) return null
+      if (typeof parsed.access_token !== "string" || !parsed.access_token) return null
       return parsed
     } catch (e) {
       ctx.host.log.warn("failed reading creds: " + String(e))
       return null
     }
-  }
-
-  function saveOauthCreds(ctx, creds) {
-    try {
-      ctx.host.fs.writeText(CREDS_PATH, JSON.stringify(creds, null, 2))
-    } catch (e) {
-      ctx.host.log.warn("failed persisting creds: " + String(e))
-    }
-  }
-
-  function parseOauthClientCreds(text) {
-    if (!text || typeof text !== "string") return null
-    const idMatch = text.match(/OAUTH_CLIENT_ID\s*=\s*['"]([^'"]+)['"]/)
-    const secretMatch = text.match(/OAUTH_CLIENT_SECRET\s*=\s*['"]([^'"]+)['"]/)
-    if (!idMatch || !secretMatch) return null
-    return { clientId: idMatch[1], clientSecret: secretMatch[1] }
-  }
-
-  function readDirNames(ctx, path) {
-    if (!ctx.host.fs || typeof ctx.host.fs.listDir !== "function") return []
-    try {
-      const entries = ctx.host.fs.listDir(path)
-      return Array.isArray(entries) ? entries : []
-    } catch (e) {
-      ctx.host.log.warn("failed listing oauth roots: " + String(e))
-      return []
-    }
-  }
-
-  function collectOauth2CandidatePaths(ctx) {
-    const paths = OAUTH2_JS_PATHS.slice()
-    for (let i = 0; i < OAUTH2_VERSIONED_ROOTS.length; i += 1) {
-      const root = OAUTH2_VERSIONED_ROOTS[i]
-      const entries = readDirNames(ctx, root)
-      for (let j = 0; j < entries.length; j += 1) {
-        const entry = entries[j]
-        for (let k = 0; k < OAUTH2_VERSIONED_SUFFIXES.length; k += 1) {
-          paths.push(root + "/" + entry + OAUTH2_VERSIONED_SUFFIXES[k])
-        }
-      }
-    }
-    return paths
-  }
-
-  function loadOauthClientCreds(ctx) {
-    const candidates = collectOauth2CandidatePaths(ctx)
-    for (let i = 0; i < candidates.length; i += 1) {
-      const path = candidates[i]
-      if (!ctx.host.fs.exists(path)) continue
-      try {
-        const parsed = parseOauthClientCreds(ctx.host.fs.readText(path))
-        if (parsed) return parsed
-      } catch (e) {
-        ctx.host.log.warn("failed reading oauth2.js: " + String(e))
-      }
-    }
-    return null
   }
 
   function readNumber(value) {
@@ -162,51 +79,6 @@
     if (expiry === null) return false
     const expiryMs = expiry > 10_000_000_000 ? expiry : expiry * 1000
     return Date.now() + REFRESH_BUFFER_MS >= expiryMs
-  }
-
-  function refreshToken(ctx, creds) {
-    if (!creds.refresh_token) return null
-    const clientCreds = loadOauthClientCreds(ctx)
-    if (!clientCreds) return null
-
-    let resp
-    try {
-      resp = ctx.util.request({
-        method: "POST",
-        url: TOKEN_URL,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        bodyText:
-          "client_id=" +
-          encodeURIComponent(clientCreds.clientId) +
-          "&client_secret=" +
-          encodeURIComponent(clientCreds.clientSecret) +
-          "&refresh_token=" +
-          encodeURIComponent(creds.refresh_token) +
-          "&grant_type=refresh_token",
-        timeoutMs: 15000,
-      })
-    } catch (e) {
-      ctx.host.log.warn("refresh request failed: " + String(e))
-      return null
-    }
-
-    if (ctx.util.isAuthStatus(resp.status)) {
-      throw "Gemini session expired. Run `gemini auth login` to authenticate."
-    }
-    if (resp.status < 200 || resp.status >= 300) return null
-
-    const data = ctx.util.tryParseJson(resp.bodyText)
-    if (!data || typeof data.access_token !== "string" || !data.access_token) return null
-
-    creds.access_token = data.access_token
-    if (typeof data.id_token === "string" && data.id_token) creds.id_token = data.id_token
-    if (typeof data.refresh_token === "string" && data.refresh_token) creds.refresh_token = data.refresh_token
-    if (typeof data.expires_in === "number") {
-      creds.expiry_date = Date.now() + data.expires_in * 1000
-    }
-
-    saveOauthCreds(ctx, creds)
-    return creds.access_token
   }
 
   function postJson(ctx, url, accessToken, body) {
@@ -353,40 +225,18 @@
     return lines
   }
 
-  function fetchLoadCodeAssist(ctx, accessToken, creds) {
-    let currentToken = accessToken
-    const resp = ctx.util.retryOnceOnAuth({
-      request: function (token) {
-        return postJson(ctx, LOAD_CODE_ASSIST_URL, token || currentToken, { metadata: IDE_METADATA })
-      },
-      refresh: function () {
-        const refreshed = refreshToken(ctx, creds)
-        if (refreshed) currentToken = refreshed
-        return refreshed
-      },
-    })
-
+  function fetchLoadCodeAssist(ctx, accessToken) {
+    const resp = postJson(ctx, LOAD_CODE_ASSIST_URL, accessToken, { metadata: IDE_METADATA })
     if (ctx.util.isAuthStatus(resp.status)) {
       throw "Gemini session expired. Run `gemini auth login` to authenticate."
     }
-    if (resp.status < 200 || resp.status >= 300) return { data: null, accessToken: currentToken }
-    return { data: ctx.util.tryParseJson(resp.bodyText), accessToken: currentToken }
+    if (resp.status < 200 || resp.status >= 300) return { data: null, accessToken }
+    return { data: ctx.util.tryParseJson(resp.bodyText), accessToken }
   }
 
-  function fetchQuotaWithRetry(ctx, accessToken, creds, projectId) {
-    let currentToken = accessToken
-    const resp = ctx.util.retryOnceOnAuth({
-      request: function (token) {
-        const body = projectId ? { project: projectId } : {}
-        return postJson(ctx, QUOTA_URL, token || currentToken, body)
-      },
-      refresh: function () {
-        const refreshed = refreshToken(ctx, creds)
-        if (refreshed) currentToken = refreshed
-        return refreshed
-      },
-    })
-
+  function fetchQuotaWithRetry(ctx, accessToken, projectId) {
+    const body = projectId ? { project: projectId } : {}
+    const resp = postJson(ctx, QUOTA_URL, accessToken, body)
     if (ctx.util.isAuthStatus(resp.status)) {
       throw "Gemini session expired. Run `gemini auth login` to authenticate."
     }
@@ -404,20 +254,18 @@
 
     let accessToken = creds.access_token
     if (needsRefresh(creds)) {
-      const refreshed = refreshToken(ctx, creds)
-      if (refreshed) accessToken = refreshed
-      else if (!accessToken) throw "Not logged in. Run `gemini auth login` to authenticate."
+      ctx.host.log.warn("Gemini token is near expiry; OpenUsage will not refresh OAuth tokens in-app")
     }
 
     const idTokenPayload = decodeIdToken(ctx, creds.id_token)
-    const loadCodeAssistResult = fetchLoadCodeAssist(ctx, accessToken, creds)
+    const loadCodeAssistResult = fetchLoadCodeAssist(ctx, accessToken)
     accessToken = loadCodeAssistResult.accessToken
 
     const tier = readFirstStringDeep(loadCodeAssistResult.data, ["tier", "userTier", "subscriptionTier"])
     const plan = mapTierToPlan(tier, idTokenPayload)
 
     const projectId = discoverProjectId(ctx, accessToken, loadCodeAssistResult.data)
-    const quotaResp = fetchQuotaWithRetry(ctx, accessToken, creds, projectId)
+    const quotaResp = fetchQuotaWithRetry(ctx, accessToken, projectId)
     const quotaData = ctx.util.tryParseJson(quotaResp.bodyText)
     if (!quotaData || typeof quotaData !== "object") {
       throw "Gemini quota response invalid. Try again later."

@@ -5,10 +5,7 @@ Tracks Gemini CLI usage through local OAuth credentials and Gemini quota APIs.
 ## Data sources
 
 - `~/.gemini/settings.json` for auth mode
-- `~/.gemini/oauth_creds.json` for OAuth tokens
-- Gemini CLI `oauth2.js` for OAuth client ID/secret
-  - exact global installs: Bun, npm-global, Homebrew, `/usr/local/lib/node_modules`, `/usr/lib/node_modules`
-  - versioned Linux installs: `mise`, `nvm`, `volta`
+- `~/.gemini/oauth_creds.json` for OAuth access token and account identity
 
 ## Supported auth modes
 
@@ -27,7 +24,6 @@ These return explicit errors.
 - `POST https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist`
 - `POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota`
 - `GET https://cloudresourcemanager.googleapis.com/v1/projects` (project fallback)
-- `POST https://oauth2.googleapis.com/token` (refresh)
 
 ## Output mapping
 
@@ -39,3 +35,7 @@ These return explicit errors.
 - **Pro**: lowest remaining Gemini Pro bucket
 - **Flash**: lowest remaining Gemini Flash bucket
 - **Account**: email from `id_token` claims
+
+## Security note
+
+OpenUsage intentionally does not read Gemini CLI OAuth client credentials or perform OAuth refresh inside this app. If the Gemini access token expires, rerun `gemini auth login`.

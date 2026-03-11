@@ -768,7 +768,7 @@ describe("antigravity plugin", () => {
     expect(result.lines.length).toBeGreaterThan(0)
   })
 
-  it("handles protobuf with no refresh_token or expiry", async () => {
+  it("handles protobuf with no expiry", async () => {
     const ctx = makeCtx()
     const protoB64 = makeProtobufBase64(ctx, "ya29.access-only", null, null)
     setupSqliteMock(ctx, makeAuthStatusJson(), protoB64)
@@ -787,63 +787,6 @@ describe("antigravity plugin", () => {
     plugin.probe(ctx)
 
     expect(capturedAuth).toBe("Bearer ya29.access-only")
-  })
-
-  it("sends correct form-urlencoded POST to Google OAuth", async () => {
-    const ctx = makeCtx()
-    const futureExpiry = Math.floor(Date.now() / 1000) + 3600
-    const protoB64 = makeProtobufBase64(ctx, "ya29.expired", "1//my-refresh", futureExpiry)
-    setupSqliteMock(ctx, makeAuthStatusJson(), protoB64)
-    ctx.host.ls.discover.mockReturnValue(null)
-
-    let oauthBody = null
-    let oauthHeaders = null
-    ctx.host.http.request.mockImplementation((opts) => {
-      const url = String(opts.url)
-      if (url.includes("oauth2.googleapis.com")) {
-        oauthBody = opts.bodyText
-        oauthHeaders = opts.headers
-        return { status: 200, bodyText: JSON.stringify({ access_token: "ya29.refreshed-token" }) }
-      }
-      if (url.includes("fetchAvailableModels")) {
-        if (opts.headers.Authorization === "Bearer ya29.refreshed-token") {
-          return { status: 200, bodyText: JSON.stringify(makeCloudCodeResponse()) }
-        }
-        return { status: 401, bodyText: '{"error":"unauthorized"}' }
-      }
-      return { status: 500, bodyText: "" }
-    })
-
-    const plugin = await loadPlugin()
-    plugin.probe(ctx)
-
-    expect(oauthHeaders["Content-Type"]).toBe("application/x-www-form-urlencoded")
-    expect(oauthBody).toContain("client_id=")
-    expect(oauthBody).toContain("client_secret=")
-    expect(oauthBody).toContain("refresh_token=" + encodeURIComponent("1//my-refresh"))
-    expect(oauthBody).toContain("grant_type=refresh_token")
-  })
-
-  it("throws when all tokens fail and refresh returns invalid_grant", async () => {
-    const ctx = makeCtx()
-    const futureExpiry = Math.floor(Date.now() / 1000) + 3600
-    const protoB64 = makeProtobufBase64(ctx, "ya29.expired", "1//bad-refresh", futureExpiry)
-    setupSqliteMock(ctx, makeAuthStatusJson(), protoB64)
-    ctx.host.ls.discover.mockReturnValue(null)
-
-    ctx.host.http.request.mockImplementation((opts) => {
-      const url = String(opts.url)
-      if (url.includes("oauth2.googleapis.com")) {
-        return { status: 400, bodyText: '{"error":"invalid_grant"}' }
-      }
-      if (url.includes("fetchAvailableModels")) {
-        return { status: 401, bodyText: '{"error":"unauthorized"}' }
-      }
-      return { status: 500, bodyText: "" }
-    })
-
-    const plugin = await loadPlugin()
-    expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")
   })
 
   it("tries proto token first, then apiKey on auth failure", async () => {
@@ -874,7 +817,29 @@ describe("antigravity plugin", () => {
     expect(result.lines.length).toBeGreaterThan(0)
   })
 
-  it("tries both tokens before refreshing", async () => {
+  it("does not call Google OAuth refresh when all tokens fail", async () => {
+    const ctx = makeCtx()
+    const futureExpiry = Math.floor(Date.now() / 1000) + 3600
+    const protoB64 = makeProtobufBase64(ctx, "ya29.expired", "1//bad-refresh", futureExpiry)
+    setupSqliteMock(ctx, makeAuthStatusJson(), protoB64)
+    ctx.host.ls.discover.mockReturnValue(null)
+
+    const calledUrls = []
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      calledUrls.push(url)
+      if (url.includes("fetchAvailableModels")) {
+        return { status: 401, bodyText: '{"error":"unauthorized"}' }
+      }
+      return { status: 500, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")
+    expect(calledUrls.some((url) => url.includes("oauth2.googleapis.com"))).toBe(false)
+  })
+
+  it("tries both tokens before failing", async () => {
     const ctx = makeCtx()
     const futureExpiry = Math.floor(Date.now() / 1000) + 3600
     const protoB64 = makeProtobufBase64(ctx, "ya29.both-fail", "1//refresh", futureExpiry)
@@ -882,31 +847,19 @@ describe("antigravity plugin", () => {
     ctx.host.ls.discover.mockReturnValue(null)
 
     const capturedTokens = []
-    let refreshCalled = false
     ctx.host.http.request.mockImplementation((opts) => {
       const url = String(opts.url)
-      if (url.includes("oauth2.googleapis.com")) {
-        refreshCalled = true
-        return { status: 200, bodyText: JSON.stringify({ access_token: "ya29.refreshed" }) }
-      }
       if (url.includes("fetchAvailableModels")) {
         capturedTokens.push(opts.headers.Authorization)
-        if (opts.headers.Authorization === "Bearer ya29.refreshed") {
-          return { status: 200, bodyText: JSON.stringify(makeCloudCodeResponse()) }
-        }
         return { status: 401, bodyText: '{"error":"unauthorized"}' }
       }
       return { status: 500, bodyText: "" }
     })
 
     const plugin = await loadPlugin()
-    const result = plugin.probe(ctx)
-
-    expect(refreshCalled).toBe(true)
+    expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")
     expect(capturedTokens.filter((t) => t === "Bearer ya29.both-fail").length).toBeGreaterThan(0)
     expect(capturedTokens.filter((t) => t === "Bearer test-api-key-123").length).toBeGreaterThan(0)
-    expect(capturedTokens[capturedTokens.length - 1]).toBe("Bearer ya29.refreshed")
-    expect(result.lines.length).toBeGreaterThan(0)
   })
 
   it("deduplicates identical tokens", async () => {
@@ -918,15 +871,8 @@ describe("antigravity plugin", () => {
 
     const capturedTokens = []
     ctx.host.http.request.mockImplementation((opts) => {
-      const url = String(opts.url)
-      if (url.includes("oauth2.googleapis.com")) {
-        return { status: 200, bodyText: JSON.stringify({ access_token: "ya29.refreshed" }) }
-      }
-      if (url.includes("fetchAvailableModels")) {
+      if (String(opts.url).includes("fetchAvailableModels")) {
         capturedTokens.push(opts.headers.Authorization)
-        if (opts.headers.Authorization === "Bearer ya29.same-token") {
-          return { status: 401, bodyText: '{"error":"unauthorized"}' }
-        }
         return { status: 200, bodyText: JSON.stringify(makeCloudCodeResponse()) }
       }
       return { status: 500, bodyText: "" }
@@ -958,37 +904,6 @@ describe("antigravity plugin", () => {
     plugin.probe(ctx)
 
     expect(capturedAuth).toBe("Bearer test-api-key-123")
-  })
-
-  it("caches refreshed token to pluginDataDir", async () => {
-    const ctx = makeCtx()
-    const futureExpiry = Math.floor(Date.now() / 1000) + 3600
-    const protoB64 = makeProtobufBase64(ctx, "ya29.will-fail", "1//refresh", futureExpiry)
-    setupSqliteMock(ctx, makeAuthStatusJson(), protoB64)
-    ctx.host.ls.discover.mockReturnValue(null)
-
-    ctx.host.http.request.mockImplementation((opts) => {
-      const url = String(opts.url)
-      if (url.includes("oauth2.googleapis.com")) {
-        return { status: 200, bodyText: JSON.stringify({ access_token: "ya29.refreshed", expires_in: 3599 }) }
-      }
-      if (url.includes("fetchAvailableModels")) {
-        if (opts.headers.Authorization === "Bearer ya29.refreshed") {
-          return { status: 200, bodyText: JSON.stringify(makeCloudCodeResponse()) }
-        }
-        return { status: 401, bodyText: '{"error":"unauthorized"}' }
-      }
-      return { status: 500, bodyText: "" }
-    })
-
-    const plugin = await loadPlugin()
-    plugin.probe(ctx)
-
-    const cachePath = ctx.app.pluginDataDir + "/auth.json"
-    expect(ctx.host.fs.writeText).toHaveBeenCalledWith(cachePath, expect.any(String))
-    const cached = JSON.parse(ctx.host.fs.writeText.mock.calls.find((c) => c[0] === cachePath)[1])
-    expect(cached.accessToken).toBe("ya29.refreshed")
-    expect(cached.expiresAtMs).toBeGreaterThan(Date.now())
   })
 
   it("uses cached token before falling back to apiKey", async () => {
