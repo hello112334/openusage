@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:release": "./scripts/build-release.sh",
+    "bump:version": "./scripts/bump-version.sh",
     "bundle:plugins": "node copy-bundled.cjs",
     "preview": "vite preview",
     "test": "vitest",

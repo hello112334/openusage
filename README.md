@@ -90,6 +90,24 @@ bun run build:release -- --target x86_64-unknown-linux-gnu --bundles deb
 
 If you need signed updater artifacts, create a `.env` based on [`.env.example`](.env.example) before running the release build.
 
+### Version Bump, Tag, and Push
+
+```bash
+./scripts/bump-version.sh
+./scripts/bump-version.sh 1.2.3
+./scripts/bump-version.sh v1.2.3
+```
+
+Behavior:
+
+- no argument: bumps the patch version from the latest `v*` git tag
+- with an argument: uses that exact version
+- syncs `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+- creates `version/vX.Y.Z.md`
+- commits the release, creates the tag, and pushes the branch plus tag to `origin`
+
+The script requires a clean git working tree before it runs.
+
 ## Repository Layout
 
 - [`docs/providers`](docs/providers) provider-specific auth and usage notes
