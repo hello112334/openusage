@@ -1217,15 +1217,24 @@ describe("antigravity plugin", () => {
     expect(calls.filter((u) => u.includes("oauth2.googleapis.com")).length).toBe(0)
   })
 
-  it("uses the Antigravity CLI oauth credentials file when available", async () => {
+  it("uses the Antigravity CLI keyring token when available", async () => {
     const ctx = makeCtx()
     ctx.host.ls.discover.mockReturnValue(null)
     ctx.host.sqlite.query.mockReturnValue("[]")
 
-    ctx.host.fs.writeText("~/.gemini/oauth_creds.json", JSON.stringify({
-      access_token: "ya29.cli-oauth-token",
-      expiry_date: Date.now() + 3600 * 1000
-    }))
+    ctx.host.keychain.readGenericPassword.mockImplementation((service) => {
+      if (service === "gemini:antigravity") {
+        return JSON.stringify({
+          auth_method: "consumer",
+          token: {
+            access_token: "ya29.cli-oauth-token",
+            token_type: "Bearer",
+            expiry: new Date(Date.now() + 3600 * 1000).toISOString(),
+          }
+        })
+      }
+      throw new Error("not found")
+    })
 
     ctx.host.http.request.mockImplementation((opts) => {
       if (String(opts.url).includes("fetchAvailableModels")) {
@@ -1244,15 +1253,24 @@ describe("antigravity plugin", () => {
     expect(result.lines.length).toBeGreaterThan(0)
   })
 
-  it("skips expired Antigravity CLI oauth credentials token", async () => {
+  it("skips expired Antigravity CLI keyring token", async () => {
     const ctx = makeCtx()
     ctx.host.ls.discover.mockReturnValue(null)
     ctx.host.sqlite.query.mockReturnValue("[]")
 
-    ctx.host.fs.writeText("~/.gemini/oauth_creds.json", JSON.stringify({
-      access_token: "ya29.expired-cli-token",
-      expiry_date: Date.now() - 1000
-    }))
+    ctx.host.keychain.readGenericPassword.mockImplementation((service) => {
+      if (service === "gemini:antigravity") {
+        return JSON.stringify({
+          auth_method: "consumer",
+          token: {
+            access_token: "ya29.expired-cli-token",
+            token_type: "Bearer",
+            expiry: new Date(Date.now() - 1000).toISOString(),
+          }
+        })
+      }
+      throw new Error("not found")
+    })
 
     const plugin = await loadPlugin()
     expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")

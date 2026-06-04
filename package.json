@@ -13,7 +13,8 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest run --coverage.enabled",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:linux": "WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 tauri"
   },
   "dependencies": {
     "@aptabase/tauri": "^0.4.1",

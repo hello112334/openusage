@@ -423,22 +423,22 @@
 
   // --- Antigravity CLI Fallbacks ---
 
-  var CLI_CREDS_PATH = "~/.gemini/oauth_creds.json"
-
+  // agy stores its OAuth token in the OS keyring (Linux Secret Service / macOS Keychain).
+  // The keyring entry is JSON: { token: { access_token, expiry, ... }, auth_method }
   function loadCliCredsToken(ctx) {
-    if (!ctx.host.fs.exists(CLI_CREDS_PATH)) return null
     try {
-      var content = ctx.host.fs.readText(CLI_CREDS_PATH)
-      var parsed = ctx.util.tryParseJson(content)
-      if (parsed && typeof parsed === "object" && parsed.access_token) {
-        var expiry = parsed.expiry_date
-        if (expiry && typeof expiry === "number" && expiry <= Date.now()) {
-          return null
-        }
-        return parsed.access_token
+      var raw = ctx.host.keychain.readGenericPassword("gemini:antigravity")
+      var parsed = ctx.util.tryParseJson(raw)
+      if (!parsed || typeof parsed !== "object") return null
+      var tok = parsed.token
+      if (!tok || typeof tok !== "object" || !tok.access_token) return null
+      if (tok.expiry) {
+        var expiryMs = new Date(tok.expiry).getTime()
+        if (expiryMs && expiryMs <= Date.now()) return null
       }
+      return tok.access_token
     } catch (e) {
-      ctx.host.log.warn("failed to read Antigravity CLI credentials: " + String(e))
+      ctx.host.log.warn("failed to read Antigravity CLI keyring token: " + String(e))
     }
     return null
   }

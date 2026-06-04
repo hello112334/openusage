@@ -1,0 +1,5 @@
+[env]
+# Point bindgen/clang at the GCC 15 include dir so stdbool.h is found.
+# Needed on Ubuntu with clang 21 which resolves GCC headers via a broken
+# sysroot path (/../lib/gcc/...) when no /usr/include/clang/<ver>/include/ exists.
+BINDGEN_EXTRA_CLANG_ARGS = "-I/usr/lib/gcc/x86_64-linux-gnu/15/include"

@@ -6,6 +6,7 @@ use std::sync::{Mutex, OnceLock};
 
 const WHITELISTED_ENV_VARS: [&str; 4] = ["CODEX_HOME", "ZAI_API_KEY", "GLM_API_KEY", "ANTIGRAVITY_API_KEY"];
 const GH_CLI_KEYCHAIN_SERVICE: &str = "gh:github.com";
+const AGY_KEYRING_SERVICE: &str = "gemini:antigravity";
 
 fn last_non_empty_trimmed_line(text: &str) -> Option<String> {
     text.lines()
@@ -36,6 +37,32 @@ fn read_env_value_via_command(program: &str, args: &[&str]) -> Option<String> {
 
 fn read_gh_auth_token_via_cli() -> Option<String> {
     read_env_value_via_command("gh", &["auth", "token", "-h", "github.com"])
+}
+
+// Reads the agy (Antigravity CLI) OAuth token from the Linux Secret Service keyring.
+// Returns the raw JSON blob stored by agy (contains "token" and "auth_method" fields).
+fn read_agy_token_from_keyring() -> Option<String> {
+    let script = r#"
+import sys
+try:
+    import secretstorage, json
+    bus = secretstorage.dbus_init()
+    col = secretstorage.get_default_collection(bus)
+    for item in col.get_all_items():
+        a = item.get_attributes()
+        if a.get('service') == 'gemini' and a.get('username') == 'antigravity':
+            print(item.get_secret().decode())
+            sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+"#;
+    let output = Command::new("python3").args(["-c", script]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
 }
 
 fn terminal_env_cache() -> &'static Mutex<HashMap<String, Option<String>>> {
@@ -1137,6 +1164,15 @@ fn inject_keychain<'js>(ctx: &Ctx<'js>, host: &Object<'js>) -> rquickjs::Result<
                         return Err(Exception::throw_message(
                             &ctx_inner,
                             "gh auth token failed or returned no token",
+                        ));
+                    }
+                    if service == AGY_KEYRING_SERVICE {
+                        if let Some(token) = read_agy_token_from_keyring() {
+                            return Ok(token);
+                        }
+                        return Err(Exception::throw_message(
+                            &ctx_inner,
+                            "agy keyring token not found",
                         ));
                     }
                     return Err(Exception::throw_message(
