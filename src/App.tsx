@@ -65,7 +65,7 @@ import {
 const PANEL_WIDTH = 400;
 const MAX_HEIGHT_FALLBACK_PX = 600;
 const MAX_HEIGHT_FRACTION_OF_MONITOR = 0.8;
-const ARROW_OVERHEAD_PX = 37; // .tray-arrow (7px) + wrapper pt-1.5 (6px) + bottom p-6 (24px)
+const ARROW_OVERHEAD_PX = 0;
 const TRAY_SETTINGS_DEBOUNCE_MS = 2000;
 const TRAY_PROBE_DEBOUNCE_MS = 500;
 const MACOS_TRAY_ICON_RESOURCE = "icons/tray-icon.png"
@@ -1007,8 +1007,7 @@ function App() {
   }
 
   return (
-    <div ref={containerRef} className="flex flex-col items-center p-6 pt-1.5 bg-transparent">
-      <div className="tray-arrow" />
+    <div ref={containerRef} className="flex flex-col bg-transparent">
       <div
         className="relative bg-card rounded-xl overflow-hidden select-none w-full border shadow-lg flex flex-col"
         style={maxPanelHeightPx ? { maxHeight: `${maxPanelHeightPx - ARROW_OVERHEAD_PX}px` } : undefined}
