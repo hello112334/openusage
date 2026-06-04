@@ -158,12 +158,12 @@
   function getLsProcessNames(ctx) {
     var platform = getPlatform(ctx)
     if (platform === "linux") {
-      return ["language_server_linux", "language_server", "language_server_macos"]
+      return ["language_server_linux", "language_server", "language_server_macos", "agentapi"]
     }
     if (platform === "windows") {
-      return ["language_server_windows.exe", "language_server.exe", "language_server"]
+      return ["language_server_windows.exe", "language_server.exe", "language_server", "agentapi.exe", "agentapi"]
     }
-    return ["language_server_macos", "language_server"]
+    return ["language_server_macos", "language_server", "agentapi"]
   }
 
   function discoverLs(ctx) {
@@ -171,7 +171,7 @@
     for (var i = 0; i < processNames.length; i++) {
       var discovery = ctx.host.ls.discover({
         processName: processNames[i],
-        markers: ["antigravity"],
+        markers: ["antigravity", "antigravity-cli"],
         csrfFlag: "--csrf_token",
         portFlag: "--extension_server_port",
       })
@@ -421,6 +421,37 @@
     return { plan: plan, lines: lines }
   }
 
+  // --- Antigravity CLI Fallbacks ---
+
+  var CLI_CREDS_PATH = "~/.gemini/oauth_creds.json"
+
+  function loadCliCredsToken(ctx) {
+    if (!ctx.host.fs.exists(CLI_CREDS_PATH)) return null
+    try {
+      var content = ctx.host.fs.readText(CLI_CREDS_PATH)
+      var parsed = ctx.util.tryParseJson(content)
+      if (parsed && typeof parsed === "object" && parsed.access_token) {
+        var expiry = parsed.expiry_date
+        if (expiry && typeof expiry === "number" && expiry <= Date.now()) {
+          return null
+        }
+        return parsed.access_token
+      }
+    } catch (e) {
+      ctx.host.log.warn("failed to read Antigravity CLI credentials: " + String(e))
+    }
+    return null
+  }
+
+  function loadEnvApiKey(ctx) {
+    try {
+      return ctx.host.env.get("ANTIGRAVITY_API_KEY")
+    } catch (e) {
+      ctx.host.log.warn("failed to read ANTIGRAVITY_API_KEY: " + String(e))
+      return null
+    }
+  }
+
   // --- Probe ---
 
   function probe(ctx) {
@@ -442,6 +473,13 @@
 
     if (apiKey && apiKey !== (proto && proto.accessToken) && apiKey !== cached) tokens.push(apiKey)
 
+    // Antigravity CLI fallbacks
+    var cliToken = loadCliCredsToken(ctx)
+    if (cliToken && tokens.indexOf(cliToken) === -1) tokens.push(cliToken)
+
+    var envKey = loadEnvApiKey(ctx)
+    if (envKey && tokens.indexOf(envKey) === -1) tokens.push(envKey)
+
     if (tokens.length === 0) throw "Start Antigravity and try again."
 
     var ccData = null
@@ -461,4 +499,5 @@
   }
 
   globalThis.__openusage_plugin = { id: "antigravity", probe: probe }
+  // @ts-ignore
 })()

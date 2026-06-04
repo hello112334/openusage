@@ -1216,4 +1216,97 @@ describe("antigravity plugin", () => {
     expect(calls.filter((u) => u.includes("fetchAvailableModels")).length).toBe(0)
     expect(calls.filter((u) => u.includes("oauth2.googleapis.com")).length).toBe(0)
   })
+
+  it("uses the Antigravity CLI oauth credentials file when available", async () => {
+    const ctx = makeCtx()
+    ctx.host.ls.discover.mockReturnValue(null)
+    ctx.host.sqlite.query.mockReturnValue("[]")
+
+    ctx.host.fs.writeText("~/.gemini/oauth_creds.json", JSON.stringify({
+      access_token: "ya29.cli-oauth-token",
+      expiry_date: Date.now() + 3600 * 1000
+    }))
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("fetchAvailableModels")) {
+        expect(opts.headers["Authorization"]).toBe("Bearer ya29.cli-oauth-token")
+        return {
+          status: 200,
+          bodyText: JSON.stringify(makeCloudCodeResponse()),
+        }
+      }
+      return { status: 500, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(result.lines.length).toBeGreaterThan(0)
+  })
+
+  it("skips expired Antigravity CLI oauth credentials token", async () => {
+    const ctx = makeCtx()
+    ctx.host.ls.discover.mockReturnValue(null)
+    ctx.host.sqlite.query.mockReturnValue("[]")
+
+    ctx.host.fs.writeText("~/.gemini/oauth_creds.json", JSON.stringify({
+      access_token: "ya29.expired-cli-token",
+      expiry_date: Date.now() - 1000
+    }))
+
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("Start Antigravity and try again.")
+  })
+
+  it("uses the ANTIGRAVITY_API_KEY environment variable when available", async () => {
+    const ctx = makeCtx()
+    ctx.host.ls.discover.mockReturnValue(null)
+    ctx.host.sqlite.query.mockReturnValue("[]")
+
+    ctx.host.env.get.mockImplementation((name) => {
+      if (name === "ANTIGRAVITY_API_KEY") return "env-api-key-xyz"
+      return null
+    })
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("fetchAvailableModels")) {
+        expect(opts.headers["Authorization"]).toBe("Bearer env-api-key-xyz")
+        return {
+          status: 200,
+          bodyText: JSON.stringify(makeCloudCodeResponse()),
+        }
+      }
+      return { status: 500, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(result.lines.length).toBeGreaterThan(0)
+  })
+
+  it("probes agentapi process and includes antigravity-cli marker in discovery", async () => {
+    const ctx = makeCtx()
+    const response = makeUserStatusResponse()
+    ctx.host.ls.discover.mockImplementation((opts) => {
+      if (opts.processName === "agentapi" && opts.markers.includes("antigravity-cli")) {
+        return makeDiscovery({ pid: 666 })
+      }
+      return null
+    })
+    ctx.host.http.request.mockImplementation((opts) => {
+      if (String(opts.url).includes("GetUnleashData")) {
+        return { status: 200, bodyText: "{}" }
+      }
+      return { status: 200, bodyText: JSON.stringify(response) }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(result.plan).toBe("Pro")
+    expect(ctx.host.ls.discover).toHaveBeenCalledWith(expect.objectContaining({
+      markers: expect.arrayContaining(["antigravity-cli"])
+    }))
+  })
 })

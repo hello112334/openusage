@@ -13,18 +13,21 @@ Antigravity is essentially a Google-branded fork of [Windsurf](windsurf.md) — 
 - **Quota:** fraction (0.0–1.0, where 1.0 = 100% remaining)
 - **Quota window:** 5 hours
 - **Timestamps:** ISO 8601
-- **Requires:** Antigravity IDE running (language server process), or signed-in credentials in SQLite (Cloud Code fallback)
+- **Requires:** Antigravity IDE running (language server process), Antigravity CLI running (agentapi process), or signed-in credentials (from SQLite state DB, `~/.gemini/oauth_creds.json`, or the `ANTIGRAVITY_API_KEY` environment variable).
 
 ## Discovery
 
-The language server listens on a random localhost port. Three values must be discovered from the running process.
+The language server or CLI API agent listens on a random localhost port. Three values must be discovered from the running process.
 
 ```bash
 # 1. Find process and extract CSRF token
 ps -ax -o pid=,command= | grep 'language_server_.*antigravity'
-# Match: --app_data_dir antigravity  OR  path contains /antigravity/
+# or search for agentapi CLI process:
+ps -ax -o pid=,command= | grep 'agentapi.*antigravity-cli'
+# Match: --app_data_dir antigravity, --app_data_dir antigravity-cli, OR path contains /antigravity/
 # Extract: --csrf_token <token>
 # Extract: --extension_server_port <port>  (HTTP fallback)
+
 
 # 2. Find listening ports
 lsof -nP -iTCP -sTCP:LISTEN -a -p <pid>
@@ -242,14 +245,16 @@ The Cloud Code model set is a superset of the LS model set. The LS returns only 
 
 1. Read `antigravityAuthStatus` from SQLite for API key (optional, may fail)
 2. Read `jetskiStateSync.agentManagerInitState` from SQLite, decode protobuf for OAuth tokens (optional, may fail)
-3. **Strategy 1 — LS probe (primary):**
-   a. Discover LS process via `ctx.host.ls.discover()` (ps + lsof)
+3. Read `~/.gemini/oauth_creds.json` for Antigravity CLI OAuth access token (optional, may fail)
+4. Read `ANTIGRAVITY_API_KEY` from the environment (optional, may fail)
+5. **Strategy 1 — LS probe (primary):**
+   a. Discover LS or agentapi process via `ctx.host.ls.discover()` (ps + lsof)
    b. Probe ports with `GetUnleashData` to find the Connect-RPC endpoint
    c. Include `apiKey` in metadata if available
    d. Call `GetUserStatus` for plan name + per-model quota
    e. Fall back to `GetCommandModelConfigs` if `GetUserStatus` fails
-4. **Strategy 2 — Cloud Code API (fallback, only if LS fails):**
-   a. Build candidate token list: proto access_token, legacy cached token (if fresh), apiKey (all deduplicated)
+6. **Strategy 2 — Cloud Code API (fallback, only if LS fails):**
+   a. Build candidate token list: proto access_token, legacy cached token (if fresh), apiKey, CLI OAuth token (if fresh), and ANTIGRAVITY_API_KEY (all deduplicated)
    b. Try each token with `fetchAvailableModels`
    c. Parse model quota: skip `isInternal` models, empty-displayName models, and blacklisted model IDs
-5. If both strategies fail: error "Start Antigravity and try again."
+7. If both strategies fail: error "Start Antigravity and try again."

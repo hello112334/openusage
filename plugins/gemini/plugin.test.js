@@ -207,4 +207,199 @@ describe("gemini plugin", () => {
     const plugin = await loadPlugin()
     expect(() => plugin.probe(ctx)).toThrow("session expired")
   })
+
+  it("throws when auth type is vertex-ai", async () => {
+    const ctx = makeCtx()
+    ctx.host.fs.writeText(SETTINGS_PATH, JSON.stringify({ authType: "vertex-ai" }))
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("vertex-ai")
+  })
+
+  it("warns when token is near expiry", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs + 10_000,
+      })
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "standard-tier", cloudaicompanionProject: "gen-lang-client-123" }),
+        }
+      }
+      if (url === QUOTA_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({
+            quotaBuckets: [],
+          }),
+        }
+      }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    plugin.probe(ctx)
+    expect(ctx.host.log.warn).toHaveBeenCalledWith(expect.stringContaining("near expiry"))
+  })
+
+  it("throws when quota request fails with non-auth status", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs + 3600_000,
+      })
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "standard-tier", cloudaicompanionProject: "gen-lang-client-123" }),
+        }
+      }
+      if (url === QUOTA_URL) return { status: 500, bodyText: "" }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("quota request failed")
+  })
+
+  it("throws when quota response is invalid", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs + 3600_000,
+      })
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "standard-tier", cloudaicompanionProject: "gen-lang-client-123" }),
+        }
+      }
+      if (url === QUOTA_URL) return { status: 200, bodyText: "not-json" }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("quota response invalid")
+  })
+
+  it("handles unknown user tiers and project discovery errors", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs + 3600_000,
+      })
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "unknown-tier" }),
+        }
+      }
+      if (url === PROJECTS_URL) {
+        throw new Error("network error")
+      }
+      if (url === QUOTA_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ quotaBuckets: [] }),
+        }
+      }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.plan).toBeUndefined()
+  })
+
+  it("handles projects with no matching labels or prefixes", async () => {
+    const ctx = makeCtx()
+    const nowMs = 1_700_000_000_000
+    vi.spyOn(Date, "now").mockReturnValue(nowMs)
+
+    ctx.host.fs.writeText(
+      CREDS_PATH,
+      JSON.stringify({
+        access_token: "token",
+        refresh_token: "refresh-token",
+        id_token: makeJwt({ email: "me@example.com" }),
+        expiry_date: nowMs + 3600_000,
+      })
+    )
+
+    ctx.host.http.request.mockImplementation((opts) => {
+      const url = String(opts.url)
+      if (url === LOAD_CODE_ASSIST_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ tier: "standard-tier" }),
+        }
+      }
+      if (url === PROJECTS_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({
+            projects: [
+              { projectId: "non-matching-project" }
+            ]
+          }),
+        }
+      }
+      if (url === QUOTA_URL) {
+        return {
+          status: 200,
+          bodyText: JSON.stringify({ quotaBuckets: [] }),
+        }
+      }
+      return { status: 404, bodyText: "" }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+    expect(result.plan).toBe("Paid")
+  })
 })

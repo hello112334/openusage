@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
-const WHITELISTED_ENV_VARS: [&str; 3] = ["CODEX_HOME", "ZAI_API_KEY", "GLM_API_KEY"];
+const WHITELISTED_ENV_VARS: [&str; 4] = ["CODEX_HOME", "ZAI_API_KEY", "GLM_API_KEY", "ANTIGRAVITY_API_KEY"];
 const GH_CLI_KEYCHAIN_SERVICE: &str = "gh:github.com";
 
 fn last_non_empty_trimmed_line(text: &str) -> Option<String> {
